@@ -1,0 +1,34 @@
+ARG BASE_IMAGE=trackdlo2-base:latest
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Gazebo Fortress and UR simulation packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-ros-gz \
+    ros-${ROS_DISTRO}-ros-gz-sim \
+    ros-${ROS_DISTRO}-ros-gz-bridge \
+    ros-${ROS_DISTRO}-ros-gz-image \
+    ros-${ROS_DISTRO}-ur-description \
+    ros-${ROS_DISTRO}-ur-simulation-gazebo \
+    ros-${ROS_DISTRO}-ros2-control \
+    ros-${ROS_DISTRO}-ros2-controllers \
+    ros-${ROS_DISTRO}-gz-ros2-control \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create workspace
+RUN mkdir -p /ros2_ws/src
+WORKDIR /ros2_ws
+
+# Copy necessary packages
+COPY trackdlo_bringup/ src/trackdlo_bringup/
+COPY trackdlo_description/ src/trackdlo_description/
+
+# Build workspace
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    rm -rf build log
+
+RUN echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
+
+CMD ["bash"]

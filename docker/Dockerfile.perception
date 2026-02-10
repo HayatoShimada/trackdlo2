@@ -1,0 +1,24 @@
+ARG BASE_IMAGE=trackdlo2-base:latest
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Create workspace
+RUN mkdir -p /ros2_ws/src
+WORKDIR /ros2_ws
+
+# Copy perception and utils packages
+COPY trackdlo_perception/ src/trackdlo_perception/
+COPY trackdlo_utils/ src/trackdlo_utils/
+COPY trackdlo_bringup/ src/trackdlo_bringup/
+COPY trackdlo_msgs/ src/trackdlo_msgs/
+
+# Build workspace
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    rm -rf build log
+
+# Source workspace on entry
+RUN echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
+
+CMD ["bash"]

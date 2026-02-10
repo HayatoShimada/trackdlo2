@@ -1,0 +1,46 @@
+FROM ros:humble-ros-base-jammy
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=humble
+
+# Install common dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    ros-${ROS_DISTRO}-cv-bridge \
+    ros-${ROS_DISTRO}-image-transport \
+    ros-${ROS_DISTRO}-pcl-conversions \
+    ros-${ROS_DISTRO}-pcl-ros \
+    ros-${ROS_DISTRO}-message-filters \
+    ros-${ROS_DISTRO}-tf2-ros \
+    ros-${ROS_DISTRO}-tf2-geometry-msgs \
+    ros-${ROS_DISTRO}-rosbag2-cpp \
+    ros-${ROS_DISTRO}-rosbag2-storage-default-plugins \
+    ros-${ROS_DISTRO}-sensor-msgs-py \
+    ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+    libpcl-dev \
+    libeigen3-dev \
+    libopencv-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+RUN pip3 install --no-cache-dir \
+    numpy \
+    scipy \
+    scikit-image \
+    open3d \
+    Pillow
+
+# Use CycloneDDS as default RMW
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV ROS_DOMAIN_ID=42
+
+# Setup entrypoint
+COPY ros_entrypoint.sh /ros_entrypoint.sh
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]

@@ -1,0 +1,112 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base-jammy
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-pip \
+            python3-colcon-common-extensions \
+            ros-humble-cv-bridge \
+            ros-humble-image-transport \
+            ros-humble-pcl-conversions \
+            ros-humble-pcl-ros \
+            ros-humble-message-filters \
+            ros-humble-tf2-ros \
+            ros-humble-tf2-geometry-msgs \
+            ros-humble-rosbag2-cpp \
+            ros-humble-rosbag2-storage-default-plugins \
+            ros-humble-sensor-msgs-py \
+            ros-humble-visualization-msgs \
+            ros-humble-std-msgs \
+            ros-humble-ament-cmake \
+            ros-humble-ament-cmake-python \
+            ros-humble-ament-lint-auto \
+            ros-humble-ament-lint-common \
+            libpcl-dev \
+            libeigen3-dev \
+            libopencv-dev
+          pip3 install --no-cache-dir numpy scipy scikit-image Pillow
+
+      - name: Create workspace and build
+        run: |
+          mkdir -p /ros2_ws/src
+          cp -r $GITHUB_WORKSPACE/trackdlo_perception /ros2_ws/src/
+          cp -r $GITHUB_WORKSPACE/trackdlo_utils /ros2_ws/src/
+          cp -r $GITHUB_WORKSPACE/trackdlo_bringup /ros2_ws/src/
+          cp -r $GITHUB_WORKSPACE/trackdlo_description /ros2_ws/src/
+          cp -r $GITHUB_WORKSPACE/trackdlo_msgs /ros2_ws/src/
+          cd /ros2_ws
+          . /opt/ros/humble/setup.sh
+          colcon build --packages-select \
+            trackdlo_msgs \
+            trackdlo_perception \
+            trackdlo_utils \
+            trackdlo_bringup \
+            trackdlo_description \
+            --cmake-args -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+
+      - name: Run tests
+        run: |
+          cd /ros2_ws
+          . /opt/ros/humble/setup.sh
+          . install/setup.sh
+          colcon test --packages-select \
+            trackdlo_perception \
+            trackdlo_utils \
+            trackdlo_bringup \
+            --return-code-on-test-failure
+        shell: bash
+
+  docker-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build base Docker image
+        run: |
+          docker build -f docker/Dockerfile.base -t trackdlo2-base:latest .
+
+      - name: Build perception Docker image
+        run: |
+          docker build \
+            --build-arg BASE_IMAGE=trackdlo2-base:latest \
+            -f docker/Dockerfile.perception \
+            -t trackdlo2-perception:latest .
+
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install linters
+        run: pip install flake8
+
+      - name: Run flake8
+        run: |
+          flake8 trackdlo_perception/trackdlo_perception/ \
+                 trackdlo_utils/trackdlo_utils/ \
+                 --max-line-length=150 --ignore=E501,W503,E741

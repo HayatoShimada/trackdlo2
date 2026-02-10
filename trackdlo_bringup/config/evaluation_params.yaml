@@ -1,0 +1,17 @@
+evaluation:
+  ros__parameters:
+    # 0: stationary, 1: perpendicular_motion, 2: parallel_motion
+    # 3: self_occlusion, 4: short_rope_folding, 5: short_rope_stationary
+    bag_file: 0
+    trial: 0
+    alg: "trackdlo"
+    bag_dir: ""
+    save_location: ""
+    pct_occlusion: 25
+    start_record_at: 8.0
+    exit_at: 33.0
+    wait_before_occlusion: 5.0
+    bag_rate: 0.5
+    num_of_nodes: 40
+    save_images: false
+    save_errors: true

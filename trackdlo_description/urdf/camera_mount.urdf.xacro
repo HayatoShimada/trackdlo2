@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="camera_mount">
+
+  <xacro:macro name="camera_mount" params="parent_link">
+    <!-- Camera mount link -->
+    <link name="camera_mount_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.05 0.05 0.15"/>
+        </geometry>
+        <material name="gray">
+          <color rgba="0.5 0.5 0.5 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.05 0.05 0.15"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.5"/>
+        <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- Camera mount joint (fixed to parent) -->
+    <joint name="camera_mount_joint" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="camera_mount_link"/>
+      <origin xyz="0.5309 0.0301 1.2624" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Camera optical frame -->
+    <link name="camera_color_optical_frame"/>
+
+    <joint name="camera_optical_joint" type="fixed">
+      <parent link="camera_mount_link"/>
+      <child link="camera_color_optical_frame"/>
+      <origin xyz="0 0 -0.075" rpy="-1.5707963 0 -1.5707963"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

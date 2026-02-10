@@ -1,0 +1,36 @@
+ARG BASE_IMAGE=trackdlo2-base:latest
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install MoveIt2 and UR packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-moveit \
+    ros-${ROS_DISTRO}-moveit-ros-planning-interface \
+    ros-${ROS_DISTRO}-moveit-ros-planning \
+    ros-${ROS_DISTRO}-moveit-core \
+    ros-${ROS_DISTRO}-moveit-planners-ompl \
+    ros-${ROS_DISTRO}-moveit-servo \
+    ros-${ROS_DISTRO}-ur-moveit-config \
+    ros-${ROS_DISTRO}-ur-description \
+    ros-${ROS_DISTRO}-ur-robot-driver \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create workspace
+RUN mkdir -p /ros2_ws/src
+WORKDIR /ros2_ws
+
+# Copy packages
+COPY trackdlo_moveit/ src/trackdlo_moveit/
+COPY trackdlo_bringup/ src/trackdlo_bringup/
+COPY trackdlo_description/ src/trackdlo_description/
+COPY trackdlo_msgs/ src/trackdlo_msgs/
+
+# Build workspace
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    rm -rf build log
+
+RUN echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
+
+CMD ["bash"]

@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+
+from trackdlo_perception.initialize import main
+main()
