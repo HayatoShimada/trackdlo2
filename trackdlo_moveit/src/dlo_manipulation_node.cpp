@@ -13,6 +13,7 @@ DloManipulationNode::DloManipulationNode()
     this->declare_parameter<double>("grasp_offset_z", 0.05);
     this->declare_parameter<double>("tracking_rate", 2.0);
     this->declare_parameter<double>("position_tolerance", 0.02);
+    this->declare_parameter<int>("max_consecutive_failures", 3);
 
     planning_group_ = this->get_parameter("planning_group").as_string();
     results_topic_ = this->get_parameter("results_topic").as_string();
@@ -20,6 +21,7 @@ DloManipulationNode::DloManipulationNode()
     grasp_offset_z_ = this->get_parameter("grasp_offset_z").as_double();
     tracking_rate_ = this->get_parameter("tracking_rate").as_double();
     position_tolerance_ = this->get_parameter("position_tolerance").as_double();
+    max_consecutive_failures_ = this->get_parameter("max_consecutive_failures").as_int();
 
     // TF2 setup
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -71,18 +73,16 @@ void DloManipulationNode::results_callback(
     pcl::PointCloud<pcl::PointXYZ> cloud;
     pcl::fromPCLPointCloud2(pcl_cloud, cloud);
 
-    if (cloud.empty()) return;
+    if (cloud.size() < 2) return;
 
     // Get both DLO endpoints
     auto & first_pt = cloud.points[0];
     auto & last_pt = cloud.points[cloud.size() - 1];
 
-    // Pick endpoint closer to robot base (0, 0, 0.75 in world)
-    // Points are in camera frame; transform to world to compare
     Eigen::Vector3d ep0(first_pt.x, first_pt.y, first_pt.z);
     Eigen::Vector3d ep1(last_pt.x, last_pt.y, last_pt.z);
 
-    // Try to transform both endpoints to planning frame
+    // Transform both endpoints to planning frame
     try {
         geometry_msgs::msg::PointStamped pt0_cam, pt1_cam, pt0_world, pt1_world;
         pt0_cam.header = msg->header;
@@ -94,62 +94,76 @@ void DloManipulationNode::results_callback(
         pt0_world = tf_buffer_->transform(pt0_cam, planning_frame, tf2::durationFromSec(0.1));
         pt1_world = tf_buffer_->transform(pt1_cam, planning_frame, tf2::durationFromSec(0.1));
 
-        // Robot base is at origin in planning frame; pick the closer endpoint
-        double d0 = std::hypot(pt0_world.point.x, pt0_world.point.y);
-        double d1 = std::hypot(pt1_world.point.x, pt1_world.point.y);
-
         std::lock_guard<std::mutex> lock(endpoint_mutex_);
-        if (d0 <= d1) {
-            latest_endpoint_ = Eigen::Vector3d(
-                pt0_world.point.x, pt0_world.point.y, pt0_world.point.z);
-        } else {
-            latest_endpoint_ = Eigen::Vector3d(
-                pt1_world.point.x, pt1_world.point.y, pt1_world.point.z);
-        }
+        endpoint_a_ = Eigen::Vector3d(
+            pt0_world.point.x, pt0_world.point.y, pt0_world.point.z);
+        endpoint_b_ = Eigen::Vector3d(
+            pt1_world.point.x, pt1_world.point.y, pt1_world.point.z);
         latest_frame_id_ = planning_frame;
-        endpoint_valid_ = true;
+        both_endpoints_valid_ = true;
 
     } catch (tf2::TransformException & ex) {
-        // Fallback: use first endpoint in camera frame
-        std::lock_guard<std::mutex> lock(endpoint_mutex_);
-        latest_endpoint_ = ep0;
-        latest_frame_id_ = msg->header.frame_id;
-        endpoint_valid_ = true;
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+            "TF transform failed: %s", ex.what());
     }
 }
 
 void DloManipulationNode::tracking_timer_callback()
 {
-    if (!endpoint_valid_ || executing_) return;
+    if (!both_endpoints_valid_ || executing_) return;
 
-    Eigen::Vector3d endpoint;
+    Eigen::Vector3d target;
     std::string frame_id;
+    const char* target_name;
     {
         std::lock_guard<std::mutex> lock(endpoint_mutex_);
-        endpoint = latest_endpoint_;
+        if (traversal_state_ == TraversalState::GOTO_A) {
+            target = endpoint_a_;
+            target_name = "A";
+        } else {
+            target = endpoint_b_;
+            target_name = "B";
+        }
         frame_id = latest_frame_id_;
     }
 
-    auto target_pose = create_approach_pose(endpoint, frame_id);
-
-    // Check if already close enough
-    auto current_pose = move_group_->getCurrentPose();
-    double dx = target_pose.pose.position.x - current_pose.pose.position.x;
-    double dy = target_pose.pose.position.y - current_pose.pose.position.y;
-    double dz = target_pose.pose.position.z - current_pose.pose.position.z;
-    double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-    if (distance < position_tolerance_) return;
+    auto target_pose = create_approach_pose(target, frame_id);
 
     RCLCPP_INFO(this->get_logger(),
-        "Following DLO endpoint: [%.3f, %.3f, %.3f], distance=%.3fm",
+        "Moving to endpoint %s: [%.3f, %.3f, %.3f]",
+        target_name,
         target_pose.pose.position.x, target_pose.pose.position.y,
-        target_pose.pose.position.z, distance);
+        target_pose.pose.position.z);
 
     executing_ = true;
     bool success = plan_and_execute(target_pose);
-    if (!success) {
-        RCLCPP_WARN(this->get_logger(), "Failed to plan to DLO endpoint");
+    if (success) {
+        consecutive_failures_ = 0;
+        // Execution completed — switch to other endpoint
+        if (traversal_state_ == TraversalState::GOTO_A) {
+            traversal_state_ = TraversalState::GOTO_B;
+            RCLCPP_INFO(this->get_logger(), "Reached endpoint A, heading to B");
+        } else {
+            traversal_state_ = TraversalState::GOTO_A;
+            RCLCPP_INFO(this->get_logger(), "Reached endpoint B, heading to A");
+        }
+    } else {
+        consecutive_failures_++;
+        RCLCPP_WARN(this->get_logger(),
+            "Failed to plan to endpoint %s (%d/%d)",
+            target_name, consecutive_failures_, max_consecutive_failures_);
+        if (consecutive_failures_ >= max_consecutive_failures_) {
+            if (traversal_state_ == TraversalState::GOTO_A) {
+                traversal_state_ = TraversalState::GOTO_B;
+                RCLCPP_INFO(this->get_logger(),
+                    "Switching to endpoint B after %d failures", consecutive_failures_);
+            } else {
+                traversal_state_ = TraversalState::GOTO_A;
+                RCLCPP_INFO(this->get_logger(),
+                    "Switching to endpoint A after %d failures", consecutive_failures_);
+            }
+            consecutive_failures_ = 0;
+        }
     }
     executing_ = false;
 }
@@ -198,19 +212,19 @@ void DloManipulationNode::add_collision_objects()
 {
     std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
 
-    // Table
+    // Table surface (thin box to avoid colliding with robot links below table)
     moveit_msgs::msg::CollisionObject table;
     table.header.frame_id = move_group_->getPlanningFrame();
     table.id = "table";
 
     shape_msgs::msg::SolidPrimitive table_shape;
     table_shape.type = shape_msgs::msg::SolidPrimitive::BOX;
-    table_shape.dimensions = {1.2, 0.8, 0.75};
+    table_shape.dimensions = {1.2, 0.8, 0.02};
 
     geometry_msgs::msg::Pose table_pose;
     table_pose.position.x = 0.5;
     table_pose.position.y = 0.0;
-    table_pose.position.z = 0.375;
+    table_pose.position.z = 0.74;
     table_pose.orientation.w = 1.0;
 
     table.primitives.push_back(table_shape);

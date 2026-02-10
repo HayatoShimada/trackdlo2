@@ -54,11 +54,18 @@ private:
     double tracking_rate_;
     double position_tolerance_;
 
+    // Traversal state machine
+    enum class TraversalState { GOTO_A, GOTO_B };
+    TraversalState traversal_state_{TraversalState::GOTO_A};
+    int consecutive_failures_{0};
+    int max_consecutive_failures_;
+
     // State
     std::mutex endpoint_mutex_;
-    Eigen::Vector3d latest_endpoint_;
+    Eigen::Vector3d endpoint_a_;
+    Eigen::Vector3d endpoint_b_;
     std::string latest_frame_id_;
-    bool endpoint_valid_{false};
+    bool both_endpoints_valid_{false};
     std::atomic<bool> executing_{false};
 };
 

@@ -60,9 +60,9 @@
           <color rgba="0.75 0.75 0.75 1.0"/>
         </material>
       </visual>
-      <!-- Front face plate (darker) -->
+      <!-- Front face plate (darker) - at +X (viewing direction) -->
       <visual>
-        <origin xyz="${-0.025/2 - 0.001} 0 0" rpy="0 0 0"/>
+        <origin xyz="${0.025/2 + 0.001} 0 0" rpy="0 0 0"/>
         <geometry>
           <box size="0.002 0.09 0.025"/>
         </geometry>

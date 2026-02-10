@@ -90,28 +90,13 @@ void trackdlo::set_sigma2 (double sigma2) {
 
 std::vector<int> trackdlo::get_nearest_indices (int k, int M, int idx) {
     std::vector<int> indices_arr;
-    if (idx - k < 0) {
-        for (int i = 0; i <= idx + k; i ++) {
-            if (i != idx) {
-                indices_arr.push_back(i);
-            }
+    int lo = std::max(0, idx - k);
+    int hi = std::min(M - 1, idx + k);
+    for (int i = lo; i <= hi; i ++) {
+        if (i != idx) {
+            indices_arr.push_back(i);
         }
     }
-    else if (idx + k >= M) {
-        for (int i = idx - k; i <= M - 1; i ++) {
-            if (i != idx) {
-                indices_arr.push_back(i);
-            }
-        }
-    }
-    else {
-        for (int i = idx - k; i <= idx + k; i ++) {
-            if (i != idx) {
-                indices_arr.push_back(i);
-            }
-        }
-    }
-
     return indices_arr;
 }
 

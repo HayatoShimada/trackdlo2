@@ -7,8 +7,8 @@ trackdlo:
     result_frame_id: "camera_color_optical_frame"
 
     # HSV thresholds
-    hsv_threshold_upper_limit: "130 255 255"
-    hsv_threshold_lower_limit: "90 90 30"
+    hsv_threshold_upper_limit: "135 255 255"
+    hsv_threshold_lower_limit: "85 50 20"
 
     # MCT weights: larger values make the object more rigid
     beta: 0.35
@@ -35,8 +35,8 @@ trackdlo:
     # Max distance for a node to be considered visible
     visibility_threshold: 0.008
 
-    # Approximate DLO width in pixels
-    dlo_pixel_width: 40
+    # Approximate DLO width in pixels (smaller for thin simulated DLO)
+    dlo_pixel_width: 10
 
     # GLTP registration pre-processing parameters
     beta_pre_proc: 3.0
@@ -58,5 +58,5 @@ init_tracker:
     num_of_nodes: 45
     multi_color_dlo: false
     visualize_initialization_process: false
-    hsv_threshold_upper_limit: "130 255 255"
-    hsv_threshold_lower_limit: "90 90 30"
+    hsv_threshold_upper_limit: "135 255 255"
+    hsv_threshold_lower_limit: "85 50 20"

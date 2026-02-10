@@ -11,6 +11,7 @@ import message_filters
 
 import struct
 import time
+import traceback
 import cv2
 import numpy as np
 
@@ -131,15 +132,19 @@ class InitTrackerNode(Node):
             start_time = time.time()
             mask = cv2.cvtColor(mask.copy(), cv2.COLOR_GRAY2BGR)
 
-            img_scale = 1
+            img_scale = 3
             extracted_chains = extract_connected_skeleton(
                 self.visualize_initialization_process, mask,
-                img_scale=img_scale, seg_length=8, max_curvature=25)
+                img_scale=img_scale)
 
             all_pixel_coords = []
             for chain in extracted_chains:
                 all_pixel_coords += chain
-            self.get_logger().info(f'Finished extracting chains. Time taken: {time.time()-start_time}')
+            if len(all_pixel_coords) < 10:
+                self.get_logger().warn(
+                    f'Too few skeleton points ({len(all_pixel_coords)}), retrying...')
+                return
+            self.get_logger().info(f'Finished extracting chains ({len(all_pixel_coords)} pts). Time: {time.time()-start_time:.2f}s')
 
             all_pixel_coords = np.array(all_pixel_coords) * img_scale
             all_pixel_coords = np.flip(all_pixel_coords, 1)
@@ -193,18 +198,21 @@ class InitTrackerNode(Node):
                 [0, 149/255, 203/255, 0.75], [0, 149/255, 203/255, 0.75])
             self.results_pub.publish(results)
 
-            # add color
+            # add color — use list of tuples for ROS2 sensor_msgs_py compatibility
             pc_rgba = struct.unpack('I', struct.pack('BBBB', 255, 40, 40, 255))[0]
-            pc_rgba_arr = np.full((len(init_nodes), 1), pc_rgba)
-            pc_colored = np.hstack((init_nodes, pc_rgba_arr)).astype(object)
-            pc_colored[:, 3] = pc_colored[:, 3].astype(int)
+            points_with_color = [
+                (float(p[0]), float(p[1]), float(p[2]), int(pc_rgba))
+                for p in init_nodes
+            ]
 
             self.header.stamp = self.get_clock().now().to_msg()
-            converted_points = pcl2.create_cloud(self.header, self.fields, pc_colored)
+            converted_points = pcl2.create_cloud(
+                self.header, self.fields, points_with_color)
             self.pc_pub.publish(converted_points)
-        except Exception:
-            self.get_logger().error("Failed to extract splines.")
-            rclpy.shutdown()
+        except Exception as e:
+            self.get_logger().warn(
+                f"Init attempt failed: {e} — will retry on next frame")
+            self.get_logger().warn(traceback.format_exc())
 
 
 def main(args=None):

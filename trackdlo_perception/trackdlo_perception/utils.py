@@ -116,9 +116,9 @@ def compute_cost (chain1, chain2, w_e, w_c, mode):
 # paper link: https://ieeexplore.ieee.org/abstract/document/9697357
 def extract_connected_skeleton (visualize_process, mask, img_scale=10, seg_length=3, max_curvature=30):
 
-    # smooth image
+    # smooth image (use smaller filter to preserve thin DLO features)
     im = Image.fromarray(mask)
-    smoothed_im = im.filter(ImageFilter.ModeFilter(size=15))
+    smoothed_im = im.filter(ImageFilter.ModeFilter(size=5))
     mask = np.array(smoothed_im)
 
     # resize if necessary for better skeletonization performance
@@ -132,9 +132,14 @@ def extract_connected_skeleton (visualize_process, mask, img_scale=10, seg_lengt
                 cv2.destroyAllWindows()
                 break
 
-    # skeletonization
-    result = skeletonize(mask, method='zha')
-    gray = cv2.cvtColor(result.copy(), cv2.COLOR_BGR2GRAY)
+    # skeletonization (requires 2D binary image)
+    if len(mask.shape) == 3:
+        mask_2d = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    else:
+        mask_2d = mask.copy()
+    mask_2d = (mask_2d > 0).astype(np.uint8)
+    skeleton = skeletonize(mask_2d, method='zhang')
+    gray = (skeleton.astype(np.uint8) * 255)
     gray[gray > 100] = 255
     print('Finished skeletonization. Traversing skeleton contours...')
 
@@ -147,7 +152,7 @@ def extract_connected_skeleton (visualize_process, mask, img_scale=10, seg_lengt
                 break
 
     # extract contour
-    contours, _ = cv2.findContours(gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[-2:]
+    contours, _ = cv2.findContours(gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[-2:]
 
     chains = []
 
@@ -283,6 +288,9 @@ def extract_connected_skeleton (visualize_process, mask, img_scale=10, seg_lengt
                 cv2.destroyAllWindows()
                 break
 
+    if len(pruned_chains) == 0:
+        print('Warning: No chains survived pruning.')
+        return []
     if len(pruned_chains) == 1:
         return pruned_chains
 
@@ -319,7 +327,7 @@ def extract_connected_skeleton (visualize_process, mask, img_scale=10, seg_lengt
         cur_chain = pruned_chains[cur_chain_idx]
 
         if cur_idx % 2 == 1:
-            cur_chain.reverse()
+            cur_chain = cur_chain[::-1]
         ordered_chains.append(cur_chain)
 
         if cur_idx % 2 == 0:
@@ -384,9 +392,9 @@ def ndarray2MarkerArray (Y, marker_frame, node_color, line_color):
         cur_node_result.ns = "node_results" + str(i)
         cur_node_result.id = i
 
-        cur_node_result.pose.position.x = Y[i, 0]
-        cur_node_result.pose.position.y = Y[i, 1]
-        cur_node_result.pose.position.z = Y[i, 2]
+        cur_node_result.pose.position.x = float(Y[i, 0])
+        cur_node_result.pose.position.y = float(Y[i, 1])
+        cur_node_result.pose.position.z = float(Y[i, 2])
         cur_node_result.pose.orientation.w = 1.0
         cur_node_result.pose.orientation.x = 0.0
         cur_node_result.pose.orientation.y = 0.0
@@ -395,10 +403,10 @@ def ndarray2MarkerArray (Y, marker_frame, node_color, line_color):
         cur_node_result.scale.x = 0.01
         cur_node_result.scale.y = 0.01
         cur_node_result.scale.z = 0.01
-        cur_node_result.color.r = node_color[0]
-        cur_node_result.color.g = node_color[1]
-        cur_node_result.color.b = node_color[2]
-        cur_node_result.color.a = node_color[3]
+        cur_node_result.color.r = float(node_color[0])
+        cur_node_result.color.g = float(node_color[1])
+        cur_node_result.color.b = float(node_color[2])
+        cur_node_result.color.a = float(node_color[3])
 
         results.markers.append(cur_node_result)
 
@@ -412,28 +420,25 @@ def ndarray2MarkerArray (Y, marker_frame, node_color, line_color):
         cur_line_result.ns = "line_results" + str(i)
         cur_line_result.id = i
 
-        cur_line_result.pose.position.x = ((Y[i] + Y[i+1])/2)[0]
-        cur_line_result.pose.position.y = ((Y[i] + Y[i+1])/2)[1]
-        cur_line_result.pose.position.z = ((Y[i] + Y[i+1])/2)[2]
+        cur_line_result.pose.position.x = float(((Y[i] + Y[i+1])/2)[0])
+        cur_line_result.pose.position.y = float(((Y[i] + Y[i+1])/2)[1])
+        cur_line_result.pose.position.z = float(((Y[i] + Y[i+1])/2)[2])
 
         rot_matrix = rotation_matrix_from_vectors(np.array([0, 0, 1]), (Y[i+1]-Y[i])/pt2pt_dis(Y[i+1], Y[i]))
         r = R.from_matrix(rot_matrix)
-        x = r.as_quat()[0]
-        y = r.as_quat()[1]
-        z = r.as_quat()[2]
-        w = r.as_quat()[3]
+        quat = r.as_quat()
 
-        cur_line_result.pose.orientation.w = w
-        cur_line_result.pose.orientation.x = x
-        cur_line_result.pose.orientation.y = y
-        cur_line_result.pose.orientation.z = z
+        cur_line_result.pose.orientation.x = float(quat[0])
+        cur_line_result.pose.orientation.y = float(quat[1])
+        cur_line_result.pose.orientation.z = float(quat[2])
+        cur_line_result.pose.orientation.w = float(quat[3])
         cur_line_result.scale.x = 0.005
         cur_line_result.scale.y = 0.005
-        cur_line_result.scale.z = pt2pt_dis(Y[i], Y[i+1])
-        cur_line_result.color.r = line_color[0]
-        cur_line_result.color.g = line_color[1]
-        cur_line_result.color.b = line_color[2]
-        cur_line_result.color.a = line_color[3]
+        cur_line_result.scale.z = float(pt2pt_dis(Y[i], Y[i+1]))
+        cur_line_result.color.r = float(line_color[0])
+        cur_line_result.color.g = float(line_color[1])
+        cur_line_result.color.b = float(line_color[2])
+        cur_line_result.color.a = float(line_color[3])
 
         results.markers.append(cur_line_result)
 

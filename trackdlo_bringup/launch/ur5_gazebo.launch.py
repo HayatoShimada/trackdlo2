@@ -1,8 +1,14 @@
+import math
 import os
+import random
+import re
+import tempfile
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
-    IncludeLaunchDescription, ExecuteProcess, TimerAction
+    DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription,
+    OpaqueFunction, TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable
@@ -10,10 +16,44 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
-def generate_launch_description():
+def _randomize_dlo_pose(sdf_path):
+    """Generate a copy of the SDF with a randomized DLO root pose."""
+    with open(sdf_path, 'r') as f:
+        content = f.read()
+
+    # Random position on table, constrained to camera FOV
+    # Camera at (0.53, 0.03, 1.25) looking down; DLO is ~0.6m long
+    x = random.uniform(0.30, 0.50)
+    y = random.uniform(-0.05, 0.05)
+    z = 0.76
+    yaw = random.uniform(-math.pi / 4, math.pi / 4)
+    new_pose = f'{x:.4f} {y:.4f} {z:.4f} 0 0 {yaw:.4f}'
+
+    content = re.sub(
+        r'(<model name="dlo">\s*<pose>)[^<]+(</pose>)',
+        rf'\g<1>{new_pose}\g<2>',
+        content,
+    )
+
+    tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.sdf', prefix='dlo_workspace_', delete=False)
+    tmp.write(content)
+    tmp.close()
+    return tmp.name
+
+
+def _launch_setup(context, *args, **kwargs):
     bringup_dir = get_package_share_directory('trackdlo_bringup')
     description_dir = get_package_share_directory('trackdlo_description')
-    world_file = os.path.join(bringup_dir, 'worlds', 'dlo_workspace.sdf')
+    template_sdf = os.path.join(bringup_dir, 'worlds', 'dlo_workspace.sdf')
+
+    randomize = context.launch_configurations.get(
+        'randomize_dlo', 'true').lower() == 'true'
+
+    if randomize:
+        world_file = _randomize_dlo_pose(template_sdf)
+    else:
+        world_file = template_sdf
 
     # Process URDF via xacro
     robot_description_content = Command([
@@ -25,7 +65,7 @@ def generate_launch_description():
             robot_description_content, value_type=str)
     }
 
-    return LaunchDescription([
+    return [
         # 1. Launch Gazebo Fortress with DLO workspace world
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([
@@ -98,6 +138,7 @@ def generate_launch_description():
             remappings=[
                 ('/camera/image', '/camera/color/image_raw'),
                 ('/camera/depth_image', '/gz/camera/depth_raw'),
+                # Bridge camera_info to raw topic; corrector fixes intrinsics
                 ('/camera/camera_info', '/camera/color/camera_info'),
                 ('/camera/points', '/camera/depth/color/points'),
             ],
@@ -126,4 +167,13 @@ def generate_launch_description():
             ],
             output='screen',
         ),
+    ]
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'randomize_dlo', default_value='true',
+            description='Randomize DLO initial pose on table'),
+        OpaqueFunction(function=_launch_setup),
     ])

@@ -271,6 +271,7 @@ private:
         delete cloud;
 
         init_nodes_ = cloud_xyz.getMatrixXfMap().topRows(3).transpose().cast<double>();
+        RCLCPP_INFO_STREAM(this->get_logger(), "Received " << init_nodes_.rows() << " init nodes");
         received_init_nodes_ = true;
         // Shut down the subscription by resetting the shared_ptr
         init_nodes_sub_.reset();
@@ -557,10 +558,18 @@ private:
             // sort visible nodes to preserve the original connectivity
             std::sort(visible_nodes.begin(), visible_nodes.end());
 
+            RCLCPP_INFO_STREAM(this->get_logger(), "Visible nodes: " + std::to_string(visible_nodes.size()) + " / " + std::to_string(Y_.rows()));
+
+            if (visible_nodes.empty()) {
+                RCLCPP_WARN(this->get_logger(), "No visible nodes — skipping tracking step");
+                tracking_img_pub_.publish(tracking_img_msg);
+                return;
+            }
+
             // minor mid-section occlusion is usually fine
             // extend visible nodes so that gaps as small as 2 to 3 nodes are filled
             std::vector<int> visible_nodes_extended = {};
-            for (size_t i = 0; i < visible_nodes.size() - 1; i++) {
+            for (size_t i = 0; i + 1 < visible_nodes.size(); i++) {
                 visible_nodes_extended.push_back(visible_nodes[i]);
                 // extend visible nodes
                 if (fabs(converted_node_coord_[visible_nodes[i + 1]] - converted_node_coord_[visible_nodes[i]]) <= d_vis_) {
@@ -569,7 +578,7 @@ private:
                     }
                 }
             }
-            visible_nodes_extended.push_back(visible_nodes[visible_nodes.size() - 1]);
+            visible_nodes_extended.push_back(visible_nodes.back());
 
             // store Y_0 for post processing
             MatrixXd Y_0 = Y_.replicate(1, 1);
