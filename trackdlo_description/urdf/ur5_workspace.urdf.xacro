@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ur5_workspace">
+
+  <!-- World link -->
+  <link name="world"/>
+
+  <!-- UR5 robot from ur_description (use ur_macro.xacro, NOT ur.urdf.xacro) -->
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:ur_robot
+    name="ur5"
+    tf_prefix=""
+    parent="world"
+    joint_limits_parameters_file="$(find ur_description)/config/ur5/joint_limits.yaml"
+    kinematics_parameters_file="$(find ur_description)/config/ur5/default_kinematics.yaml"
+    physical_parameters_file="$(find ur_description)/config/ur5/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/ur5/visual_parameters.yaml"
+    sim_ignition="true"
+    headless_mode="false"
+    robot_ip="0.0.0.0"
+    use_fake_hardware="false"
+    fake_sensor_commands="false"
+    initial_positions="${dict(
+      shoulder_pan_joint=0.0,
+      shoulder_lift_joint=-1.5708,
+      elbow_joint=1.5708,
+      wrist_1_joint=-1.5708,
+      wrist_2_joint=-1.5708,
+      wrist_3_joint=0.0)}"
+  >
+    <!-- origin: UR5 base on table surface at z=0.75 -->
+    <origin xyz="0.0 0.0 0.75" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <!-- Overhead RealSense D435 camera (fixed to world) -->
+  <xacro:include filename="$(find trackdlo_description)/urdf/realsense_d435.urdf.xacro"/>
+  <xacro:realsense_d435 parent_link="world"
+    cam_pos_x="0.5309" cam_pos_y="0.0301" cam_pos_z="1.2624"
+    name="camera"/>
+
+  <!-- gz_ros2_control plugin for Gazebo Fortress -->
+  <gazebo>
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find trackdlo_moveit)/config/ur5_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+</robot>

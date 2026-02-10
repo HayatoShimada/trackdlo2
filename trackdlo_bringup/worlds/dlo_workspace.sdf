@@ -1,22 +1,36 @@
 <?xml version="1.0" ?>
 <sdf version="1.8">
   <world name="dlo_workspace">
-    <!-- Physics -->
+
+    <!-- ============================================================ -->
+    <!-- Physics: 1 ms step, real-time factor 1.0                     -->
+    <!-- ============================================================ -->
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
     </physics>
 
-    <!-- Plugins -->
-    <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics"/>
-    <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands"/>
-    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster"/>
-    <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+    <!-- ============================================================ -->
+    <!-- Plugins                                                      -->
+    <!-- ============================================================ -->
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-sensors-system"
+            name="ignition::gazebo::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
-    <plugin filename="ignition-gazebo-contact-system" name="ignition::gazebo::systems::Contact"/>
+    <plugin filename="ignition-gazebo-contact-system"
+            name="ignition::gazebo::systems::Contact"/>
 
-    <!-- Lighting -->
+    <!-- ============================================================ -->
+    <!-- Lighting                                                     -->
+    <!-- ============================================================ -->
+
+    <!-- Directional sun -->
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <pose>0 0 10 0 0 0</pose>
@@ -31,6 +45,7 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
+    <!-- Point fill light -->
     <light type="point" name="fill_light">
       <pose>1 1 3 0 0 0</pose>
       <diffuse>0.5 0.5 0.5 1</diffuse>
@@ -43,7 +58,22 @@
       </attenuation>
     </light>
 
-    <!-- Ground Plane -->
+    <!-- Point back fill light (reduce shadows) -->
+    <light type="point" name="back_fill_light">
+      <pose>-0.5 -0.5 2.5 0 0 0</pose>
+      <diffuse>0.4 0.4 0.4 1</diffuse>
+      <specular>0.05 0.05 0.05 1</specular>
+      <attenuation>
+        <range>20</range>
+        <constant>0.5</constant>
+        <linear>0.01</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <!-- ============================================================ -->
+    <!-- Ground Plane: 100x100, light gray                            -->
+    <!-- ============================================================ -->
     <model name="ground_plane">
       <static>true</static>
       <link name="link">
@@ -70,7 +100,9 @@
       </link>
     </model>
 
-    <!-- Workspace Table -->
+    <!-- ============================================================ -->
+    <!-- Table: static, white                                         -->
+    <!-- ============================================================ -->
     <model name="table">
       <static>true</static>
       <pose>0.5 0 0.375 0 0 0</pose>
@@ -85,60 +117,132 @@
             <box><size>1.2 0.8 0.75</size></box>
           </geometry>
           <material>
-            <ambient>0.6 0.5 0.4 1</ambient>
-            <diffuse>0.6 0.5 0.4 1</diffuse>
+            <ambient>0.9 0.88 0.85 1</ambient>
+            <diffuse>0.95 0.92 0.88 1</diffuse>
           </material>
         </visual>
       </link>
     </model>
 
-    <!-- RGBD Camera mounted above workspace -->
-    <model name="rgbd_camera">
+    <!-- ============================================================ -->
+    <!-- RealSense D435: static RGBD camera, mounted above workspace -->
+    <!--   Color: 1280x720 @30fps, HFOV 69.4deg (1.2112 rad)        -->
+    <!--   Depth: 1280x720 @30fps, HFOV 87deg (1.5184 rad)          -->
+    <!--   Range: 0.105m - 10m, Baseline: 50mm                      -->
+    <!-- ============================================================ -->
+    <model name="realsense_d435">
       <static>true</static>
-      <pose>0.5308947503950723 0.030109485611943067 1.3374 -1.5707963 0 0</pose>
+      <pose>0.5309 0.0301 1.3374 -1.5708 0 0</pose>
       <link name="camera_link">
-        <visual name="visual">
+        <!-- D435 body: 90mm x 25mm x 25mm -->
+        <visual name="d435_body">
           <geometry>
-            <box><size>0.05 0.1 0.03</size></box>
+            <box><size>0.025 0.09 0.025</size></box>
+          </geometry>
+          <material>
+            <ambient>0.6 0.6 0.6 1</ambient>
+            <diffuse>0.75 0.75 0.75 1</diffuse>
+          </material>
+        </visual>
+        <!-- Front face (black) -->
+        <visual name="d435_front">
+          <pose>-0.0135 0 0 0 0 0</pose>
+          <geometry>
+            <box><size>0.002 0.09 0.025</size></box>
+          </geometry>
+          <material>
+            <ambient>0.05 0.05 0.05 1</ambient>
+            <diffuse>0.1 0.1 0.1 1</diffuse>
+          </material>
+        </visual>
+        <!-- Left IR lens indicator -->
+        <visual name="d435_ir_left">
+          <pose>-0.014 0.02 0 0 0 0</pose>
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.002</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.05 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+        <!-- Right IR lens indicator -->
+        <visual name="d435_ir_right">
+          <pose>-0.014 -0.03 0 0 0 0</pose>
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.002</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.05 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+        <!-- Color lens indicator -->
+        <visual name="d435_color_lens">
+          <pose>-0.014 0.0348 0 0 0 0</pose>
+          <geometry>
+            <cylinder><radius>0.003</radius><length>0.002</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.0 0.1 1</ambient>
+            <diffuse>0.0 0.0 0.2 1</diffuse>
+          </material>
+        </visual>
+        <!-- Mount bracket -->
+        <visual name="d435_mount">
+          <pose>0.02 0 0 0 0 0</pose>
+          <geometry>
+            <cylinder><radius>0.012</radius><length>0.08</length></cylinder>
           </geometry>
           <material>
             <ambient>0.2 0.2 0.2 1</ambient>
             <diffuse>0.3 0.3 0.3 1</diffuse>
           </material>
         </visual>
-        <sensor name="rgbd_camera" type="rgbd_camera">
+
+        <!-- RGBD sensor matching D435 color camera specs -->
+        <sensor name="d435_rgbd" type="rgbd_camera">
           <always_on>1</always_on>
-          <update_rate>15</update_rate>
+          <update_rate>30</update_rate>
           <camera>
-            <horizontal_fov>1.2217</horizontal_fov>
+            <!-- D435 color HFOV: 69.4 deg = 1.2112 rad -->
+            <horizontal_fov>1.2112</horizontal_fov>
             <image>
               <width>1280</width>
               <height>720</height>
               <format>R8G8B8</format>
             </image>
             <clip>
-              <near>0.1</near>
+              <near>0.105</near>
               <far>10.0</far>
             </clip>
             <depth_camera>
               <clip>
-                <near>0.1</near>
+                <near>0.105</near>
                 <far>10.0</far>
               </clip>
             </depth_camera>
+            <!-- Gaussian noise to simulate real D435 depth noise -->
+            <noise>
+              <type>gaussian</type>
+              <mean>0.0</mean>
+              <stddev>0.002</stddev>
+            </noise>
           </camera>
           <topic>camera</topic>
         </sensor>
       </link>
     </model>
 
-    <!-- Simple DLO model: chain of blue links connected by revolute joints -->
+    <!-- ============================================================ -->
+    <!-- DLO: 30-link chain connected by alternating revolute joints  -->
+    <!-- ============================================================ -->
     <model name="dlo">
-      <pose>0.3 0 0.76 0 0 0</pose>
+      <pose>0.4 0 0.76 0 0 0</pose>
 
-      <!-- Link 0 (base) -->
+      <!-- Link 0 -->
       <link name="link_0">
-        <pose>0 0 0 0 0 0</pose>
+        <pose>0 0 0 0 1.5708 0</pose>
         <inertial>
           <mass>0.005</mass>
           <inertia>
@@ -149,144 +253,1331 @@
           <geometry>
             <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
           </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
         </collision>
         <visual name="visual">
           <geometry>
             <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
           </geometry>
           <material>
-            <ambient>0.0 0.2 0.8 1</ambient>
-            <diffuse>0.0 0.3 0.9 1</diffuse>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
           </material>
         </visual>
       </link>
 
-      <!-- Generate 19 more links with joints -->
+      <!-- Link 1 -->
       <link name="link_1">
-        <pose>0.02 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.02 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 0-1 (even: Y axis) -->
       <joint name="joint_0_1" type="revolute">
-        <parent>link_0</parent><child>link_1</child>
+        <parent>link_0</parent>
+        <child>link_1</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 2 -->
       <link name="link_2">
-        <pose>0.04 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.04 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 1-2 (odd: Z axis) -->
       <joint name="joint_1_2" type="revolute">
-        <parent>link_1</parent><child>link_2</child>
+        <parent>link_1</parent>
+        <child>link_2</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 3 -->
       <link name="link_3">
-        <pose>0.06 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.06 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 2-3 (even: Y axis) -->
       <joint name="joint_2_3" type="revolute">
-        <parent>link_2</parent><child>link_3</child>
+        <parent>link_2</parent>
+        <child>link_3</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 4 -->
       <link name="link_4">
-        <pose>0.08 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.08 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 3-4 (odd: Z axis) -->
       <joint name="joint_3_4" type="revolute">
-        <parent>link_3</parent><child>link_4</child>
+        <parent>link_3</parent>
+        <child>link_4</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 5 -->
       <link name="link_5">
-        <pose>0.10 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.10 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 4-5 (even: Y axis) -->
       <joint name="joint_4_5" type="revolute">
-        <parent>link_4</parent><child>link_5</child>
+        <parent>link_4</parent>
+        <child>link_5</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 6 -->
       <link name="link_6">
-        <pose>0.12 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.12 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 5-6 (odd: Z axis) -->
       <joint name="joint_5_6" type="revolute">
-        <parent>link_5</parent><child>link_6</child>
+        <parent>link_5</parent>
+        <child>link_6</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 7 -->
       <link name="link_7">
-        <pose>0.14 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.14 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 6-7 (even: Y axis) -->
       <joint name="joint_6_7" type="revolute">
-        <parent>link_6</parent><child>link_7</child>
+        <parent>link_6</parent>
+        <child>link_7</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 8 -->
       <link name="link_8">
-        <pose>0.16 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.16 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 7-8 (odd: Z axis) -->
       <joint name="joint_7_8" type="revolute">
-        <parent>link_7</parent><child>link_8</child>
+        <parent>link_7</parent>
+        <child>link_8</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
 
+      <!-- Link 9 -->
       <link name="link_9">
-        <pose>0.18 0 0 0 1.5707963 0</pose>
-        <inertial><mass>0.005</mass><inertia><ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia></inertial>
-        <collision name="collision"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry></collision>
-        <visual name="visual"><geometry><cylinder><radius>0.004</radius><length>0.02</length></cylinder></geometry>
-          <material><ambient>0.0 0.2 0.8 1</ambient><diffuse>0.0 0.3 0.9 1</diffuse></material></visual>
+        <pose>0.18 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
       </link>
+
+      <!-- Joint 8-9 (even: Y axis) -->
       <joint name="joint_8_9" type="revolute">
-        <parent>link_8</parent><child>link_9</child>
+        <parent>link_8</parent>
+        <child>link_9</child>
         <pose>-0.01 0 0 0 0 0</pose>
-        <axis><xyz>0 1 0</xyz><limit><lower>-1.57</lower><upper>1.57</upper></limit>
-          <dynamics><damping>0.01</damping></dynamics></axis>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
       </joint>
+
+      <!-- Link 10 -->
+      <link name="link_10">
+        <pose>0.20 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 9-10 (odd: Z axis) -->
+      <joint name="joint_9_10" type="revolute">
+        <parent>link_9</parent>
+        <child>link_10</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 11 -->
+      <link name="link_11">
+        <pose>0.22 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 10-11 (even: Y axis) -->
+      <joint name="joint_10_11" type="revolute">
+        <parent>link_10</parent>
+        <child>link_11</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 12 -->
+      <link name="link_12">
+        <pose>0.24 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 11-12 (odd: Z axis) -->
+      <joint name="joint_11_12" type="revolute">
+        <parent>link_11</parent>
+        <child>link_12</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 13 -->
+      <link name="link_13">
+        <pose>0.26 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 12-13 (even: Y axis) -->
+      <joint name="joint_12_13" type="revolute">
+        <parent>link_12</parent>
+        <child>link_13</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 14 -->
+      <link name="link_14">
+        <pose>0.28 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 13-14 (odd: Z axis) -->
+      <joint name="joint_13_14" type="revolute">
+        <parent>link_13</parent>
+        <child>link_14</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 15 -->
+      <link name="link_15">
+        <pose>0.30 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 14-15 (even: Y axis) -->
+      <joint name="joint_14_15" type="revolute">
+        <parent>link_14</parent>
+        <child>link_15</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 16 -->
+      <link name="link_16">
+        <pose>0.32 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 15-16 (odd: Z axis) -->
+      <joint name="joint_15_16" type="revolute">
+        <parent>link_15</parent>
+        <child>link_16</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 17 -->
+      <link name="link_17">
+        <pose>0.34 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 16-17 (even: Y axis) -->
+      <joint name="joint_16_17" type="revolute">
+        <parent>link_16</parent>
+        <child>link_17</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 18 -->
+      <link name="link_18">
+        <pose>0.36 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 17-18 (odd: Z axis) -->
+      <joint name="joint_17_18" type="revolute">
+        <parent>link_17</parent>
+        <child>link_18</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 19 -->
+      <link name="link_19">
+        <pose>0.38 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 18-19 (even: Y axis) -->
+      <joint name="joint_18_19" type="revolute">
+        <parent>link_18</parent>
+        <child>link_19</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 20 -->
+      <link name="link_20">
+        <pose>0.40 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 19-20 (odd: Z axis) -->
+      <joint name="joint_19_20" type="revolute">
+        <parent>link_19</parent>
+        <child>link_20</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 21 -->
+      <link name="link_21">
+        <pose>0.42 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 20-21 (even: Y axis) -->
+      <joint name="joint_20_21" type="revolute">
+        <parent>link_20</parent>
+        <child>link_21</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 22 -->
+      <link name="link_22">
+        <pose>0.44 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 21-22 (odd: Z axis) -->
+      <joint name="joint_21_22" type="revolute">
+        <parent>link_21</parent>
+        <child>link_22</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 23 -->
+      <link name="link_23">
+        <pose>0.46 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 22-23 (even: Y axis) -->
+      <joint name="joint_22_23" type="revolute">
+        <parent>link_22</parent>
+        <child>link_23</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 24 -->
+      <link name="link_24">
+        <pose>0.48 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 23-24 (odd: Z axis) -->
+      <joint name="joint_23_24" type="revolute">
+        <parent>link_23</parent>
+        <child>link_24</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 25 -->
+      <link name="link_25">
+        <pose>0.50 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 24-25 (even: Y axis) -->
+      <joint name="joint_24_25" type="revolute">
+        <parent>link_24</parent>
+        <child>link_25</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 26 -->
+      <link name="link_26">
+        <pose>0.52 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 25-26 (odd: Z axis) -->
+      <joint name="joint_25_26" type="revolute">
+        <parent>link_25</parent>
+        <child>link_26</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 27 -->
+      <link name="link_27">
+        <pose>0.54 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 26-27 (even: Y axis) -->
+      <joint name="joint_26_27" type="revolute">
+        <parent>link_26</parent>
+        <child>link_27</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 28 -->
+      <link name="link_28">
+        <pose>0.56 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 27-28 (odd: Z axis) -->
+      <joint name="joint_27_28" type="revolute">
+        <parent>link_27</parent>
+        <child>link_28</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
+      <!-- Link 29 -->
+      <link name="link_29">
+        <pose>0.58 0 0 0 1.5708 0</pose>
+        <inertial>
+          <mass>0.005</mass>
+          <inertia>
+            <ixx>1e-7</ixx><iyy>1e-6</iyy><izz>1e-6</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            </friction>
+            <contact>
+              <ode><kp>1e6</kp><kd>100</kd></ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.004</radius><length>0.02</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.0 0.3 1.0 1</ambient>
+            <diffuse>0.1 0.4 1.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Joint 28-29 (even: Y axis) -->
+      <joint name="joint_28_29" type="revolute">
+        <parent>link_28</parent>
+        <child>link_29</child>
+        <pose>-0.01 0 0 0 0 0</pose>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-1.57</lower><upper>1.57</upper></limit>
+          <dynamics><damping>0.05</damping><spring_stiffness>0.1</spring_stiffness></dynamics>
+        </axis>
+      </joint>
+
     </model>
 
   </world>

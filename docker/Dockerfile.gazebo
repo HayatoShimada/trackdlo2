@@ -3,26 +3,45 @@ FROM ${BASE_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Gazebo Fortress and UR simulation packages
+# Install Gazebo Fortress, UR packages, MoveIt2, ros2_control
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-ros-gz \
     ros-${ROS_DISTRO}-ros-gz-sim \
     ros-${ROS_DISTRO}-ros-gz-bridge \
     ros-${ROS_DISTRO}-ros-gz-image \
     ros-${ROS_DISTRO}-ur-description \
-    ros-${ROS_DISTRO}-ur-simulation-gazebo \
+    ros-${ROS_DISTRO}-ur-moveit-config \
+    ros-${ROS_DISTRO}-ur-robot-driver \
     ros-${ROS_DISTRO}-ros2-control \
     ros-${ROS_DISTRO}-ros2-controllers \
     ros-${ROS_DISTRO}-gz-ros2-control \
+    ros-${ROS_DISTRO}-moveit \
+    ros-${ROS_DISTRO}-moveit-ros-planning-interface \
+    ros-${ROS_DISTRO}-moveit-planners-ompl \
+    ros-${ROS_DISTRO}-moveit-core \
+    ros-${ROS_DISTRO}-robot-state-publisher \
+    ros-${ROS_DISTRO}-xacro \
+    ros-${ROS_DISTRO}-realsense2-description \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Create workspace
 RUN mkdir -p /ros2_ws/src
 WORKDIR /ros2_ws
 
-# Copy necessary packages
+# Clone ur_simulation_gz from source (not available via apt for Humble)
+RUN cd src && \
+    git clone -b humble \
+    https://github.com/UniversalRobots/Universal_Robots_ROS2_GZ_Simulation.git \
+    ur_simulation_gz || true
+
+# Copy packages
 COPY trackdlo_bringup/ src/trackdlo_bringup/
 COPY trackdlo_description/ src/trackdlo_description/
+COPY trackdlo_moveit/ src/trackdlo_moveit/
+COPY trackdlo_msgs/ src/trackdlo_msgs/
+COPY trackdlo_utils/ src/trackdlo_utils/
+COPY trackdlo_perception/ src/trackdlo_perception/
 
 # Build workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \

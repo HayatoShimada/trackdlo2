@@ -26,6 +26,7 @@ setup(
             'collect_pointcloud = trackdlo_utils.collect_pointcloud:main',
             'mask_node = trackdlo_utils.mask:main',
             'tracking_result_img = trackdlo_utils.tracking_result_img_from_pointcloud_topic:main',
+            'depth_format_converter = trackdlo_utils.depth_format_converter:main',
         ],
     },
 )

@@ -48,6 +48,7 @@ ament_target_dependencies(trackdlo_core
   std_msgs
   visualization_msgs
   cv_bridge
+  image_transport
   pcl_conversions
 )
 

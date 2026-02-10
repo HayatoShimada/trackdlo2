@@ -28,8 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
+# Pin numpy<2 for compatibility with ros-humble-cv-bridge (compiled against numpy 1.x)
 RUN pip3 install --no-cache-dir \
-    numpy \
+    "numpy<2" \
     scipy \
     scikit-image \
     open3d \
@@ -40,7 +41,7 @@ ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 ENV ROS_DOMAIN_ID=42
 
 # Setup entrypoint
-COPY ros_entrypoint.sh /ros_entrypoint.sh
+COPY docker/ros_entrypoint.sh /ros_entrypoint.sh
 RUN chmod +x /ros_entrypoint.sh
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
