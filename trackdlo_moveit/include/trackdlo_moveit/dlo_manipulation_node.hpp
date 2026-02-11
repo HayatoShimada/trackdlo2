@@ -10,6 +10,7 @@
 #include <std_srvs/srv/set_bool.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit_msgs/msg/robot_trajectory.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -26,6 +27,8 @@ private:
     void deferred_init();
     void results_callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg);
     void tracking_timer_callback();
+    void search_for_dlo();
+    void track_along_dlo();
     void add_collision_objects();
     void enable_callback(
         const std_srvs::srv::SetBool::Request::SharedPtr request,
@@ -62,19 +65,26 @@ private:
     double grasp_offset_z_;
     double tracking_rate_;
     double position_tolerance_;
+    double detection_timeout_;
+    double startup_delay_;
 
     // Traversal state machine
-    enum class TraversalState { GOTO_A, GOTO_B };
-    TraversalState traversal_state_{TraversalState::GOTO_A};
+    enum class TraversalState { SEARCHING, FORWARD, BACKWARD };
+    TraversalState traversal_state_{TraversalState::SEARCHING};
     int consecutive_failures_{0};
     int max_consecutive_failures_;
 
-    // State
+    // DLO nodes (all points in planning frame)
     std::mutex endpoint_mutex_;
-    Eigen::Vector3d endpoint_a_;
-    Eigen::Vector3d endpoint_b_;
+    std::vector<Eigen::Vector3d> dlo_nodes_;
     std::string latest_frame_id_;
-    bool both_endpoints_valid_{false};
+    bool dlo_nodes_valid_{false};
+    rclcpp::Time last_detection_time_;
+
+    // Search waypoints
+    std::vector<Eigen::Vector3d> search_waypoints_;
+    size_t search_index_{0};
+
     std::atomic<bool> executing_{false};
 };
 
