@@ -98,7 +98,7 @@ def _launch_setup(context, *args, **kwargs):
 
         # 4. Spawn joint_state_broadcaster (delayed for Gazebo startup)
         TimerAction(
-            period=3.0,
+            period=10.0,
             actions=[
                 ExecuteProcess(
                     cmd=['ros2', 'control', 'load_controller',
@@ -111,7 +111,7 @@ def _launch_setup(context, *args, **kwargs):
 
         # 5. Spawn joint_trajectory_controller
         TimerAction(
-            period=5.0,
+            period=15.0,
             actions=[
                 ExecuteProcess(
                     cmd=['ros2', 'control', 'load_controller',

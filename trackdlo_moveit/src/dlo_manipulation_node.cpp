@@ -42,12 +42,15 @@ void DloManipulationNode::deferred_init()
     planning_scene_interface_ =
         std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
+    move_group_->setPlanningPipelineId("ompl");
+    move_group_->setPlannerId("RRTConnectkConfigDefault");
     move_group_->setPlanningTime(10.0);
     move_group_->setNumPlanningAttempts(20);
     move_group_->setMaxVelocityScalingFactor(0.3);
     move_group_->setMaxAccelerationScalingFactor(0.3);
     move_group_->setGoalPositionTolerance(0.02);
     move_group_->setGoalOrientationTolerance(0.15);
+    move_group_->setWorkspace(-1.0, -1.0, 0.0, 1.0, 1.0, 2.0);
 
     add_collision_objects();
 

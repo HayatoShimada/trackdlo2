@@ -45,9 +45,10 @@ def generate_launch_description():
     # --- Kinematics ---
     kinematics_yaml = load_yaml(
         'ur_moveit_config', os.path.join('config', 'kinematics.yaml'))
-    robot_description_kinematics = {
-        'robot_description_kinematics': kinematics_yaml
-    }
+    # Unwrap ROS2 parameter format: /**:ros__parameters:robot_description_kinematics:...
+    if '/**' in kinematics_yaml:
+        kinematics_yaml = kinematics_yaml['/**']['ros__parameters']
+    robot_description_kinematics = kinematics_yaml
 
     # --- Joint Limits for Planning ---
     joint_limits_yaml = {
@@ -58,6 +59,15 @@ def generate_launch_description():
     # --- OMPL Planning Pipeline ---
     ompl_planning_yaml = load_yaml(
         'ur_moveit_config', os.path.join('config', 'ompl_planning.yaml'))
+    ompl_planning_yaml['planning_plugin'] = 'ompl_interface/OMPLPlanner'
+    ompl_planning_yaml['request_adapters'] = (
+        'default_planner_request_adapters/AddTimeOptimalParameterization '
+        'default_planner_request_adapters/ResolveConstraintFrames '
+        'default_planner_request_adapters/FixWorkspaceBounds '
+        'default_planner_request_adapters/FixStartStateBounds '
+        'default_planner_request_adapters/FixStartStateCollision'
+    )
+    ompl_planning_yaml['start_state_max_bounds_error'] = 0.1
     planning_pipeline_config = {
         'planning_pipelines': ['ompl'],
         'default_planning_pipeline': 'ompl',
