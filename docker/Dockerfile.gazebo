@@ -23,6 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-xacro \
     ros-${ROS_DISTRO}-realsense2-description \
     git \
+    # Gazebo Fortress rendering (Ogre2) with AMD GPU
+    libgl1-mesa-glx \
+    libegl1-mesa \
     && rm -rf /var/lib/apt/lists/*
 
 # Create workspace

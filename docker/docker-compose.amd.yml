@@ -1,0 +1,12 @@
+services:
+  trackdlo-gazebo:
+    environment:
+      - MESA_LOADER_DRIVER_OVERRIDE=radeonsi
+    devices:
+      - /dev/dri:/dev/dri
+
+  trackdlo-viz:
+    environment:
+      - MESA_LOADER_DRIVER_OVERRIDE=radeonsi
+    devices:
+      - /dev/dri:/dev/dri

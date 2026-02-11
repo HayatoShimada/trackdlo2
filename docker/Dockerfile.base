@@ -25,6 +25,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcl-dev \
     libeigen3-dev \
     libopencv-dev \
+    # AMD GPU (Mesa/radeonsi) support for Gazebo & RViz rendering
+    libgl1-mesa-dri \
+    libglx-mesa0 \
+    mesa-utils \
+    libvulkan1 \
+    mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
