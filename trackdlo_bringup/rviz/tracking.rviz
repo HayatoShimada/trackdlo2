@@ -131,7 +131,7 @@ Visualization Manager:
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
-        Reliability Policy: Best Effort
+        Reliability Policy: Reliable
         Value: /trackdlo/results_img
       Value: true
     - Class: rviz_default_plugins/MarkerArray
