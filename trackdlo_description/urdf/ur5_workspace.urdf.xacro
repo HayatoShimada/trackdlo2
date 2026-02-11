@@ -31,10 +31,10 @@
     <origin xyz="0.0 0.0 0.75" rpy="0 0 0"/>
   </xacro:ur_robot>
 
-  <!-- Overhead RealSense D435 camera (fixed to world) -->
+  <!-- Eye-in-hand RealSense D435 camera (mounted on tool0) -->
   <xacro:include filename="$(find trackdlo_description)/urdf/realsense_d435.urdf.xacro"/>
-  <xacro:realsense_d435 parent_link="world"
-    cam_pos_x="0.5309" cam_pos_y="0.0301" cam_pos_z="1.2624"
+  <xacro:realsense_d435 parent_link="tool0"
+    cam_pos_x="0" cam_pos_y="0" cam_pos_z="0.05"
     name="camera"/>
 
   <!-- gz_ros2_control plugin for Gazebo Fortress -->

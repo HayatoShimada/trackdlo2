@@ -90,7 +90,7 @@ def generate_launch_description():
                 'use_sim_time': True,
                 'planning_group': 'ur_manipulator',
                 'results_topic': '/trackdlo/results_pc',
-                'approach_distance': 0.1,
+                'approach_distance': 0.3,
                 'grasp_offset_z': 0.05,
                 'tracking_rate': 2.0,
                 'position_tolerance': 0.02,

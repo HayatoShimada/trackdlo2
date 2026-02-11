@@ -24,10 +24,7 @@ private:
     void deferred_init();
     void results_callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg);
     void tracking_timer_callback();
-    bool plan_and_execute(const geometry_msgs::msg::PoseStamped & target_pose);
     void add_collision_objects();
-    geometry_msgs::msg::PoseStamped create_approach_pose(
-        const Eigen::Vector3d & endpoint, const std::string & frame_id);
 
     // TF2
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

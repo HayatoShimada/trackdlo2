@@ -21,8 +21,8 @@ def _randomize_dlo_pose(sdf_path):
     with open(sdf_path, 'r') as f:
         content = f.read()
 
-    # Random position on table, constrained to camera FOV
-    # Camera at (0.53, 0.03, 1.25) looking down; DLO is ~0.6m long
+    # Random position on table within UR5 workspace
+    # DLO is ~0.6m long; camera is eye-in-hand (moves with arm)
     x = random.uniform(0.30, 0.50)
     y = random.uniform(-0.05, 0.05)
     z = 0.76

@@ -13,32 +13,17 @@
       Depth-to-color offset: ~14.8mm in X
   -->
 
-  <xacro:macro name="realsense_d435" params="parent_link:=world
-    cam_pos_x:=0.5309 cam_pos_y:=0.0301 cam_pos_z:=1.2624
+  <xacro:macro name="realsense_d435" params="parent_link:=tool0
+    cam_pos_x:=0 cam_pos_y:=0 cam_pos_z:=0.05
     cam_ori_r:=0 cam_ori_p:=0 cam_ori_y:=0
     name:=camera">
 
-    <!-- Mount link (bracket/pole) -->
+    <!-- Mount link (minimal for eye-in-hand, no bracket) -->
     <link name="${name}_mount_link">
-      <visual>
-        <origin xyz="0 0 0.04" rpy="0 0 0"/>
-        <geometry>
-          <cylinder radius="0.012" length="0.08"/>
-        </geometry>
-        <material name="dark_gray">
-          <color rgba="0.3 0.3 0.3 1.0"/>
-        </material>
-      </visual>
-      <collision>
-        <origin xyz="0 0 0.04" rpy="0 0 0"/>
-        <geometry>
-          <cylinder radius="0.012" length="0.08"/>
-        </geometry>
-      </collision>
       <inertial>
-        <mass value="0.1"/>
-        <origin xyz="0 0 0.04"/>
-        <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+        <mass value="0.01"/>
+        <origin xyz="0 0 0"/>
+        <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
       </inertial>
     </link>
 
@@ -50,6 +35,7 @@
 
     <!-- D435 body (camera_link) -->
     <!-- D435 dimensions: 90mm x 25mm x 25mm -->
+    <!-- Gazebo camera sensor looks along +X of this frame -->
     <link name="${name}_link">
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -60,7 +46,6 @@
           <color rgba="0.75 0.75 0.75 1.0"/>
         </material>
       </visual>
-      <!-- Front face plate (darker) - at +X (viewing direction) -->
       <visual>
         <origin xyz="${0.025/2 + 0.001} 0 0" rpy="0 0 0"/>
         <geometry>
@@ -83,12 +68,11 @@
       </inertial>
     </link>
 
-    <!-- Mount to D435 body joint (camera hangs below mount, pointing down) -->
+    <!-- Camera body joint: camera +X (viewing) aligns with mount +Z (= tool0 +Z) -->
     <joint name="${name}_body_joint" type="fixed">
       <parent link="${name}_mount_link"/>
       <child link="${name}_link"/>
-      <!-- Camera body attached below mount, oriented downward -->
-      <origin xyz="0 0 -0.0125" rpy="0 1.5707963 0"/>
+      <origin xyz="0 0 0" rpy="0 -1.5707963 0"/>
     </joint>
 
     <!-- ============================================= -->
@@ -162,6 +146,38 @@
       <child link="${name}_infra2_optical_frame"/>
       <origin xyz="0 0 0" rpy="-1.5707963 0 -1.5707963"/>
     </joint>
+
+    <!-- Gazebo Fortress RGBD sensor attached to camera body -->
+    <gazebo reference="${name}_link">
+      <sensor name="d435_rgbd" type="rgbd_camera">
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <camera>
+          <horizontal_fov>1.2112</horizontal_fov>
+          <image>
+            <width>1280</width>
+            <height>720</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.105</near>
+            <far>10.0</far>
+          </clip>
+          <depth_camera>
+            <clip>
+              <near>0.105</near>
+              <far>10.0</far>
+            </clip>
+          </depth_camera>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.002</stddev>
+          </noise>
+        </camera>
+        <topic>camera</topic>
+      </sensor>
+    </gazebo>
 
   </xacro:macro>
 

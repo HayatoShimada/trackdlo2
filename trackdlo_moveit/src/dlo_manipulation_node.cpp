@@ -42,12 +42,12 @@ void DloManipulationNode::deferred_init()
     planning_scene_interface_ =
         std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
-    move_group_->setPlanningTime(5.0);
-    move_group_->setNumPlanningAttempts(10);
+    move_group_->setPlanningTime(10.0);
+    move_group_->setNumPlanningAttempts(20);
     move_group_->setMaxVelocityScalingFactor(0.3);
     move_group_->setMaxAccelerationScalingFactor(0.3);
-    move_group_->setGoalPositionTolerance(0.01);
-    move_group_->setGoalOrientationTolerance(0.05);
+    move_group_->setGoalPositionTolerance(0.02);
+    move_group_->setGoalOrientationTolerance(0.15);
 
     add_collision_objects();
 
@@ -127,16 +127,26 @@ void DloManipulationNode::tracking_timer_callback()
         frame_id = latest_frame_id_;
     }
 
-    auto target_pose = create_approach_pose(target, frame_id);
+    // Position above endpoint — orientation free (camera on arm looks naturally)
+    double goal_x = target.x();
+    double goal_y = target.y();
+    double goal_z = target.z() + approach_distance_;
 
     RCLCPP_INFO(this->get_logger(),
-        "Moving to endpoint %s: [%.3f, %.3f, %.3f]",
-        target_name,
-        target_pose.pose.position.x, target_pose.pose.position.y,
-        target_pose.pose.position.z);
+        "Moving toward endpoint %s: [%.3f, %.3f, %.3f]",
+        target_name, goal_x, goal_y, goal_z);
 
     executing_ = true;
-    bool success = plan_and_execute(target_pose);
+    move_group_->setPositionTarget(goal_x, goal_y, goal_z);
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    bool success = (move_group_->plan(plan) ==
+                    moveit::core::MoveItErrorCode::SUCCESS);
+    if (success) {
+        RCLCPP_INFO(this->get_logger(), "Planning succeeded, executing...");
+        move_group_->execute(plan);
+    } else {
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
+    }
     if (success) {
         consecutive_failures_ = 0;
         // Execution completed — switch to other endpoint
@@ -168,46 +178,6 @@ void DloManipulationNode::tracking_timer_callback()
     executing_ = false;
 }
 
-geometry_msgs::msg::PoseStamped DloManipulationNode::create_approach_pose(
-    const Eigen::Vector3d & endpoint, const std::string & frame_id)
-{
-    geometry_msgs::msg::PoseStamped pose;
-    pose.header.frame_id = frame_id;
-    pose.header.stamp = this->now();
-
-    // Position: above the endpoint by approach_distance
-    pose.pose.position.x = endpoint.x();
-    pose.pose.position.y = endpoint.y();
-    pose.pose.position.z = endpoint.z() + approach_distance_;
-
-    // Orientation: tool pointing straight down (180 deg rotation about Y)
-    pose.pose.orientation.x = 0.0;
-    pose.pose.orientation.y = 1.0;
-    pose.pose.orientation.z = 0.0;
-    pose.pose.orientation.w = 0.0;
-
-    return pose;
-}
-
-bool DloManipulationNode::plan_and_execute(
-    const geometry_msgs::msg::PoseStamped & target_pose)
-{
-    move_group_->setPoseTarget(target_pose);
-
-    moveit::planning_interface::MoveGroupInterface::Plan plan;
-    bool success = (move_group_->plan(plan) ==
-                    moveit::core::MoveItErrorCode::SUCCESS);
-
-    if (success) {
-        RCLCPP_INFO(this->get_logger(), "Planning succeeded, executing...");
-        move_group_->execute(plan);
-        return true;
-    } else {
-        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
-        return false;
-    }
-}
-
 void DloManipulationNode::add_collision_objects()
 {
     std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
@@ -231,26 +201,6 @@ void DloManipulationNode::add_collision_objects()
     table.primitive_poses.push_back(table_pose);
     table.operation = moveit_msgs::msg::CollisionObject::ADD;
     collision_objects.push_back(table);
-
-    // Camera mount
-    moveit_msgs::msg::CollisionObject camera_mount;
-    camera_mount.header.frame_id = move_group_->getPlanningFrame();
-    camera_mount.id = "camera_mount";
-
-    shape_msgs::msg::SolidPrimitive mount_shape;
-    mount_shape.type = shape_msgs::msg::SolidPrimitive::BOX;
-    mount_shape.dimensions = {0.05, 0.05, 0.15};
-
-    geometry_msgs::msg::Pose mount_pose;
-    mount_pose.position.x = 0.5309;
-    mount_pose.position.y = 0.0301;
-    mount_pose.position.z = 1.2624;
-    mount_pose.orientation.w = 1.0;
-
-    camera_mount.primitives.push_back(mount_shape);
-    camera_mount.primitive_poses.push_back(mount_pose);
-    camera_mount.operation = moveit_msgs::msg::CollisionObject::ADD;
-    collision_objects.push_back(camera_mount);
 
     planning_scene_interface_->addCollisionObjects(collision_objects);
     RCLCPP_INFO(this->get_logger(), "Added %zu collision objects",
