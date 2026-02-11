@@ -17,6 +17,7 @@ DloManipulationNode::DloManipulationNode()
     this->declare_parameter<int>("max_consecutive_failures", 3);
     this->declare_parameter<double>("detection_timeout", 5.0);
     this->declare_parameter<double>("startup_delay", 60.0);
+    this->declare_parameter<double>("tracking_velocity_scale", 0.05);
 
     planning_group_ = this->get_parameter("planning_group").as_string();
     results_topic_ = this->get_parameter("results_topic").as_string();
@@ -27,6 +28,7 @@ DloManipulationNode::DloManipulationNode()
     max_consecutive_failures_ = this->get_parameter("max_consecutive_failures").as_int();
     detection_timeout_ = this->get_parameter("detection_timeout").as_double();
     startup_delay_ = this->get_parameter("startup_delay").as_double();
+    tracking_velocity_scale_ = this->get_parameter("tracking_velocity_scale").as_double();
 
     // TF2 setup
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -55,15 +57,6 @@ void DloManipulationNode::deferred_init()
     move_group_->setMaxAccelerationScalingFactor(0.3);
     move_group_->setGoalPositionTolerance(0.02);
     move_group_->setWorkspace(-1.0, -1.0, 0.0, 1.0, 1.0, 2.0);
-
-    // Search waypoints (table top patrol pattern)
-    search_waypoints_ = {
-        Eigen::Vector3d(0.4,   0.0,  1.05),  // center
-        Eigen::Vector3d(0.3,  -0.15, 1.05),  // left front
-        Eigen::Vector3d(0.5,  -0.15, 1.05),  // left back
-        Eigen::Vector3d(0.5,   0.15, 1.05),  // right back
-        Eigen::Vector3d(0.3,   0.15, 1.05),  // right front
-    };
 
     last_detection_time_ = this->now();
 
@@ -152,6 +145,11 @@ void DloManipulationNode::results_callback(
         return;
     }
 
+    // Compute DLO center for dynamic search waypoints
+    Eigen::Vector3d center = Eigen::Vector3d::Zero();
+    for (auto & n : nodes) center += n;
+    center /= static_cast<double>(nodes.size());
+
     // Build endpoint message before moving nodes
     Eigen::Vector3d front = nodes.front();
     Eigen::Vector3d back = nodes.back();
@@ -162,6 +160,7 @@ void DloManipulationNode::results_callback(
         latest_frame_id_ = planning_frame;
         dlo_nodes_valid_ = true;
         last_detection_time_ = this->now();
+        last_known_dlo_center_ = center;
     }
 
     // Publish endpoints (first & last nodes)
@@ -214,6 +213,7 @@ void DloManipulationNode::tracking_timer_callback()
 
 void DloManipulationNode::search_for_dlo()
 {
+    Eigen::Vector3d center;
     // Check if DLO was detected while we waited
     {
         std::lock_guard<std::mutex> lock(endpoint_mutex_);
@@ -223,7 +223,20 @@ void DloManipulationNode::search_for_dlo()
             traversal_state_ = TraversalState::FORWARD;
             return;
         }
+        center = last_known_dlo_center_;
     }
+
+    // Generate search waypoints dynamically around last known DLO center
+    // Small patrol pattern (±0.1m) above the last known position
+    double z = center.z() + approach_distance_;
+    double r = 0.10;  // search radius
+    search_waypoints_ = {
+        Eigen::Vector3d(center.x(),     center.y(),     z),           // center
+        Eigen::Vector3d(center.x() - r, center.y() - r, z),          // front-left
+        Eigen::Vector3d(center.x() + r, center.y() - r, z),          // back-left
+        Eigen::Vector3d(center.x() + r, center.y() + r, z),          // back-right
+        Eigen::Vector3d(center.x() - r, center.y() + r, z),          // front-right
+    };
 
     auto & wp = search_waypoints_[search_index_ % search_waypoints_.size()];
 
@@ -235,7 +248,8 @@ void DloManipulationNode::search_for_dlo()
     if (move_group_->plan(plan_result) ==
         moveit::core::MoveItErrorCode::SUCCESS) {
         RCLCPP_INFO(this->get_logger(),
-            "Searching for DLO: moving to waypoint %zu", search_index_);
+            "Searching for DLO near [%.3f, %.3f, %.3f]: waypoint %zu",
+            center.x(), center.y(), center.z(), search_index_);
         move_group_->execute(plan_result);
     }
 
@@ -247,8 +261,6 @@ void DloManipulationNode::search_for_dlo()
         RCLCPP_INFO(this->get_logger(),
             "DLO detected! Switching to FORWARD");
         traversal_state_ = TraversalState::FORWARD;
-        move_group_->setMaxVelocityScalingFactor(0.3);
-        move_group_->setMaxAccelerationScalingFactor(0.3);
     }
 }
 
@@ -284,6 +296,10 @@ void DloManipulationNode::track_along_dlo()
     const char * direction =
         (traversal_state_ == TraversalState::FORWARD) ? "FWD" : "BWD";
 
+    // Set slow velocity for Cartesian path computation
+    move_group_->setMaxVelocityScalingFactor(tracking_velocity_scale_);
+    move_group_->setMaxAccelerationScalingFactor(tracking_velocity_scale_);
+
     moveit_msgs::msg::RobotTrajectory trajectory;
     double fraction = move_group_->computeCartesianPath(
         waypoints, 0.01, 0.0, trajectory, true);
@@ -293,6 +309,8 @@ void DloManipulationNode::track_along_dlo()
         direction, fraction * 100.0, waypoints.size());
 
     if (fraction >= 0.5) {
+        // Slow down trajectory to avoid losing DLO from camera view
+        scale_trajectory_speed(trajectory, tracking_velocity_scale_);
         move_group_->execute(trajectory);
         // Reverse direction
         traversal_state_ = (traversal_state_ == TraversalState::FORWARD)
@@ -309,6 +327,24 @@ void DloManipulationNode::track_along_dlo()
                 ? TraversalState::BACKWARD : TraversalState::FORWARD;
             consecutive_failures_ = 0;
         }
+    }
+}
+
+void DloManipulationNode::scale_trajectory_speed(
+    moveit_msgs::msg::RobotTrajectory & trajectory, double scale)
+{
+    for (auto & point : trajectory.joint_trajectory.points) {
+        // Stretch time_from_start by 1/scale
+        double t = point.time_from_start.sec +
+                   point.time_from_start.nanosec * 1e-9;
+        t /= scale;
+        point.time_from_start.sec = static_cast<int32_t>(t);
+        point.time_from_start.nanosec =
+            static_cast<uint32_t>((t - point.time_from_start.sec) * 1e9);
+
+        // Scale velocities and accelerations
+        for (auto & v : point.velocities) v *= scale;
+        for (auto & a : point.accelerations) a *= scale * scale;
     }
 }
 

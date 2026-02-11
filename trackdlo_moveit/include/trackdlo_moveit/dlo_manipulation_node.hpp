@@ -29,6 +29,8 @@ private:
     void tracking_timer_callback();
     void search_for_dlo();
     void track_along_dlo();
+    void scale_trajectory_speed(moveit_msgs::msg::RobotTrajectory & trajectory,
+                                double scale);
     void add_collision_objects();
     void enable_callback(
         const std_srvs::srv::SetBool::Request::SharedPtr request,
@@ -67,6 +69,7 @@ private:
     double position_tolerance_;
     double detection_timeout_;
     double startup_delay_;
+    double tracking_velocity_scale_;
 
     // Traversal state machine
     enum class TraversalState { SEARCHING, FORWARD, BACKWARD };
@@ -81,7 +84,8 @@ private:
     bool dlo_nodes_valid_{false};
     rclcpp::Time last_detection_time_;
 
-    // Search waypoints
+    // Search: dynamic waypoints around last known DLO center
+    Eigen::Vector3d last_known_dlo_center_{0.4, 0.0, 0.85};
     std::vector<Eigen::Vector3d> search_waypoints_;
     size_t search_index_{0};
 
