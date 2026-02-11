@@ -516,15 +516,26 @@ private:
             std::vector<int> self_occluding_nodes = {};
 
             // draw edges closest to the camera first
+            int img_rows = projected_edges.rows;
+            int img_cols = projected_edges.cols;
+
             for (int idx : indices_vec) {
+                // skip nodes behind the camera (z <= 0)
+                if (image_coords_mask(idx, 2) <= 0 || image_coords_mask(idx + 1, 2) <= 0) {
+                    continue;
+                }
+
                 int col_1 = static_cast<int>(image_coords_mask(idx, 0) / image_coords_mask(idx, 2));
                 int row_1 = static_cast<int>(image_coords_mask(idx, 1) / image_coords_mask(idx, 2));
 
                 int col_2 = static_cast<int>(image_coords_mask(idx + 1, 0) / image_coords_mask(idx + 1, 2));
                 int row_2 = static_cast<int>(image_coords_mask(idx + 1, 1) / image_coords_mask(idx + 1, 2));
 
+                bool pt1_in_bounds = (row_1 >= 0 && row_1 < img_rows && col_1 >= 0 && col_1 < img_cols);
+                bool pt2_in_bounds = (row_2 >= 0 && row_2 < img_rows && col_2 >= 0 && col_2 < img_cols);
+
                 // only add to visible nodes if did not overlap with existing edges
-                if (projected_edges.at<uchar>(row_1, col_1) == 0) {
+                if (pt1_in_bounds && projected_edges.at<uchar>(row_1, col_1) == 0) {
                     if (shortest_node_pt_dists[idx] <= visibility_threshold_) {
                         if (std::find(visible_nodes.begin(), visible_nodes.end(), idx) == visible_nodes.end()) {
                             visible_nodes.push_back(idx);
@@ -536,7 +547,7 @@ private:
                 }
 
                 // do not consider adjacent nodes directly on top of each other
-                if (projected_edges.at<uchar>(row_2, col_2) == 0) {
+                if (pt2_in_bounds && projected_edges.at<uchar>(row_2, col_2) == 0) {
                     if (shortest_node_pt_dists[idx + 1] <= visibility_threshold_) {
                         if (std::find(visible_nodes.begin(), visible_nodes.end(), idx + 1) == visible_nodes.end()) {
                             visible_nodes.push_back(idx + 1);
@@ -548,6 +559,7 @@ private:
                 }
 
                 // add edges for checking overlap with upcoming nodes
+                // cv::line handles out-of-bounds clipping internally
                 double x1 = col_1;
                 double y1 = row_1;
                 double x2 = col_2;
