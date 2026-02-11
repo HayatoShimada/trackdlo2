@@ -1,77 +1,132 @@
 # TrackDLO2
 
-ROS2 Humble ベースの変形線状物体 (DLO: Deformable Linear Object) リアルタイム追跡・操作システム。
-RGB-Dカメラで DLO を認識・追跡し、UR5 ロボットアームで操作する。
+ROS2 Humble + Gazebo Fortress ベースの変形線状物体 (DLO: Deformable Linear Object) リアルタイム追跡・操作システム。
+RGB-D カメラで DLO を認識・追跡し、UR5 ロボットアームで端点間を自律的に往復する。
 
-## システム構成
+## アーキテクチャ
+
+Docker Compose で 4 つのコンテナに分離し、ROS2 トピック/サービスのみで通信する。
+
+```
+[Gazebo Container]            唯一のロボット状態権限
+  robot_state_publisher     → /robot_description, /tf, /tf_static
+  joint_state_broadcaster   → /joint_states
+  joint_trajectory_controller ← FollowJointTrajectory action
+
+[Perception Container]        トピックのみで通信
+  init_tracker              → /trackdlo/init_nodes
+  trackdlo_node             → /trackdlo/results_pc
+
+[MoveIt Container]            robot_state_publisher なし
+  move_group (直接起動)     → OMPL planner → joint_trajectory_controller
+  dlo_manipulation_node:
+    subscribes:  /trackdlo/results_pc
+    publishes:   /trackdlo/endpoints (PoseArray)
+    service:     ~/enable (SetBool)
+    → MoveGroupInterface → move_group → FollowJointTrajectory
+
+[Viz Container]               純粋な可視化
+  rviz2 (RobotModel + MoveIt MotionPlanning display)
+```
+
+## パッケージ構成
 
 ```
 trackdlo2/
-├── trackdlo_bringup       # Launch ファイル・パラメータ設定・RViz 設定
-├── trackdlo_description   # ロボット (UR5) とカメラ (RealSense D435) の URDF/SDF
-├── trackdlo_perception    # DLO 追跡の中核 (初期化 + CPD-LLE トラッキング)
-├── trackdlo_moveit        # MoveIt2 によるロボット操作
-├── trackdlo_msgs          # カスタムメッセージ定義 (将来用)
-├── trackdlo_utils         # Depth 変換・テスト・可視化ユーティリティ
-└── docker/                # Docker Compose による実行環境
+├── trackdlo_bringup/        Launch ファイル・パラメータ設定・RViz 設定
+├── trackdlo_description/    UR5 + RealSense D435 の URDF
+├── trackdlo_perception/     DLO 追跡 (初期化 + CPD-LLE トラッキング)
+├── trackdlo_moveit/         MoveIt2 経路計画 + DLO 操作ノード
+├── trackdlo_msgs/           カスタムメッセージ定義 (将来用)
+├── trackdlo_utils/          Depth 変換・テスト・可視化ユーティリティ
+└── docker/                  Docker Compose + GPU 設定
+    ├── docker-compose.yml        ベース構成 (GPU 非依存)
+    ├── docker-compose.amd.yml    AMD GPU override
+    ├── docker-compose.nvidia.yml NVIDIA GPU override
+    └── run.sh                    GPU 自動選択起動スクリプト
 ```
 
-## 処理の全体フロー
+## クイックスタート
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        入力 (RGB-D カメラ)                          │
-│  /camera/color/image_raw (RGB)                                      │
-│  /camera/aligned_depth_to_color/image_raw (Depth)                   │
-│  /camera/aligned_depth_to_color/camera_info                         │
-└──────────────┬──────────────────────────────────┬───────────────────┘
-               │                                  │
-               v                                  v
-┌──────────────────────────┐       ┌──────────────────────────────┐
-│  Phase 1: 初期化          │       │  Phase 2: フレーム毎の追跡     │
-│  (init_tracker, Python)  │──────>│  (tracker_node, C++)         │
-│  1回のみ実行              │ init  │  連続実行                     │
-│                          │ nodes │                              │
-└──────────────────────────┘       └──────────────┬───────────────┘
-                                                  │
-                                                  │ /trackdlo/results_pc
-                                                  v
-                                   ┌──────────────────────────────┐
-                                   │  Phase 3: ロボット操作         │
-                                   │  (dlo_manipulation_node, C++) │
-                                   │  MoveIt2 による軌道計画・実行   │
-                                   └──────────────────────────────┘
+### ビルド
+
+```bash
+cd docker/
+bash build.sh
 ```
 
-## Phase 1: 初期化 (`init_tracker`)
+### 起動
+
+```bash
+# X11 転送を許可
+xhost +local:docker
+
+# AMD GPU (デフォルト)
+./run.sh amd
+
+# NVIDIA GPU
+./run.sh nvidia
+
+# バックグラウンド起動
+./run.sh amd -d
+```
+
+### 動作確認
+
+```bash
+# move_group が起動しているか
+docker exec trackdlo-moveit ros2 node list | grep move_group
+
+# joint_trajectory_controller が active か
+docker exec trackdlo-gazebo ros2 control list_controllers
+
+# DLO 端点がパブリッシュされているか
+docker exec trackdlo-moveit ros2 topic echo /trackdlo/endpoints --once
+
+# 自律追従の有効/無効
+docker exec trackdlo-moveit ros2 service call /dlo_manipulation/enable std_srvs/srv/SetBool "{data: false}"
+docker exec trackdlo-moveit ros2 service call /dlo_manipulation/enable std_srvs/srv/SetBool "{data: true}"
+```
+
+### RViz からの操作
+
+Viz コンテナの RViz2 に MoveIt MotionPlanning display が組み込まれている。
+
+1. 自律追従を停止: `ros2 service call /dlo_manipulation/enable std_srvs/srv/SetBool "{data: false}"`
+2. RViz の MotionPlanning パネルで Interactive Marker をドラッグしてゴール姿勢を設定
+3. "Plan" ボタンで軌道を確認、"Plan & Execute" で実行
+
+## 処理フロー
+
+### Phase 1: 初期化 (`init_tracker`)
 
 **ノード:** `trackdlo_perception/trackdlo_perception/initialize.py`
 
-最初の1フレームから DLO のスケルトンを抽出し、追跡用の初期ノード列を生成する。
+最初の 1 フレームから DLO のスケルトンを抽出し、追跡用の初期ノード列を生成する。
 
 ```
-RGB画像 + Depth画像
+RGB 画像 + Depth 画像
     │
     ├── 1. HSV 色空間でしきい値処理 → DLO のバイナリマスク生成
     ├── 2. Mode フィルタ (5x5) でノイズ除去
-    ├── 3. Zhang のスケルトン化 → 1ピクセル幅の骨格線
-    ├── 4. 輪郭検出 + 曲率制約付きチェーン抽出 (30°以内)
+    ├── 3. Zhang のスケルトン化 → 1 ピクセル幅の骨格線
+    ├── 4. 輪郭検出 + 曲率制約付きチェーン抽出 (30° 以内)
     ├── 5. カメラ内部パラメータと Depth で 3D 座標に変換
     ├── 6. スプライン補間で滑らかな曲線にフィッティング
     └── 7. 弧長に沿って等間隔に 45 ノードをサンプリング
             │
             v
-    /trackdlo/init_nodes (PointCloud2, 1回だけ publish)
+    /trackdlo/init_nodes (PointCloud2, 1 回だけ publish)
 ```
 
-## Phase 2: フレーム毎の追跡 (`tracker_node`)
+### Phase 2: フレーム毎の追跡 (`tracker_node`)
 
 **ノード:** `trackdlo_perception/src/trackdlo_node.cpp`
 **アルゴリズム:** `trackdlo_perception/src/trackdlo.cpp`
 
 毎フレームの RGB-D 入力に対して CPD-LLE アルゴリズムでノード位置を更新する。
 
-### 2-1. 前処理
+#### 前処理
 
 ```
 RGB + Depth (同期受信)
@@ -82,10 +137,10 @@ RGB + Depth (同期受信)
     └── 4. ボクセルグリッドでダウンサンプリング (8mm)
             │
             v
-    フィルタ済み点群 X (5,000〜15,000 点)
+    フィルタ済み点群 X (5,000 ~ 15,000 点)
 ```
 
-### 2-2. 可視性推定
+#### 可視性推定
 
 ```
 現在のノード列 Y + 点群 X
@@ -100,7 +155,7 @@ RGB + Depth (同期受信)
     可視ノードリスト + 自己オクルージョンフラグ
 ```
 
-### 2-3. CPD-LLE トラッキング (コアアルゴリズム)
+#### CPD-LLE トラッキング (コアアルゴリズム)
 
 CPD (Coherent Point Drift) に LLE (Locally Linear Embedding) 正則化を加えた非剛体点群レジストレーション。
 
@@ -128,33 +183,35 @@ CPD (Coherent Point Drift) に LLE (Locally Linear Embedding) 正則化を加え
     └── 5. 更新されたノード位置 Y を出力
             │
             v
-    /trackdlo/results_pc       (PointCloud2: ノード位置)
-    /trackdlo/results_marker   (MarkerArray: RViz 可視化)
-    /trackdlo/results_img      (Image: アノテーション付き追跡画像)
-    /trackdlo/filtered_pointcloud  (PointCloud2: 入力点群)
+    /trackdlo/results_pc          (PointCloud2: ノード位置)
+    /trackdlo/results_marker      (MarkerArray: RViz 可視化)
+    /trackdlo/results_img         (Image: アノテーション付き画像)
+    /trackdlo/filtered_pointcloud (PointCloud2: 入力点群)
 ```
 
-## Phase 3: ロボット操作 (`dlo_manipulation_node`)
+### Phase 3: ロボット操作 (`dlo_manipulation_node`)
 
 **ノード:** `trackdlo_moveit/src/dlo_manipulation_node.cpp`
 
-追跡結果を基に UR5 ロボットアームが DLO の端点に接近する。
+追跡結果を基に UR5 ロボットアームが DLO の端点間を自律往復する。
 
 ```
 /trackdlo/results_pc (追跡結果)
     │
     ├── 1. 点群の先頭・末尾を端点 A, B として抽出
-    ├── 2. TF2 でカメラ座標系 → ワールド座標系に変換
+    ├── 2. TF2 でカメラ座標系 → planning frame (world) に変換
+    ├── 3. /trackdlo/endpoints (PoseArray) として publish
     │
-    ├── 3. 状態機械 (2Hz で実行):
-    │      ├── GOTO_A: 端点 A の上方 (approach_distance=0.3m) へ移動
-    │      └── GOTO_B: 端点 B の上方へ移動
-    │      (交互に切り替え、失敗3回で次の端点へ)
-    │
-    └── 4. MoveIt2 で軌道計画 → UR5 実行
-            │
-            v
-    UR5 関節コマンド → /joint_trajectory_controller
+    └── 4. 状態機械 (2Hz, enabled_ && both_endpoints_valid_):
+           ├── GOTO_A: 端点 A の上方 (approach_distance=0.3m) へ移動
+           └── GOTO_B: 端点 B の上方へ移動
+           (交互に切り替え、失敗 3 回で次の端点へ)
+                │
+                └── MoveGroupInterface → move_group (OMPL)
+                        │
+                        └── FollowJointTrajectory action
+                                │
+                                └── joint_trajectory_controller → Gazebo
 ```
 
 ## シミュレーション時の追加処理
@@ -162,41 +219,67 @@ CPD (Coherent Point Drift) に LLE (Locally Linear Embedding) 正則化を加え
 Gazebo Fortress を使用する場合、カメラ出力の形式変換が必要:
 
 ```
-Gazebo カメラ                    depth_format_converter              追跡ノードへ
-  float32 (meters)  ──────────>   uint16 (millimeters)   ──────────>  tracker_node
-  /gz/camera/depth_raw            正しいカメラ内部パラメータも再計算
+Gazebo カメラ                  depth_format_converter             追跡ノードへ
+  float32 (meters)  ────────>   uint16 (millimeters)  ────────>  tracker_node
+  /gz/camera/depth_raw          正しいカメラ内部パラメータも再計算
 ```
 
-## Launch ファイル構成
-
-### シミュレーション (`sim_full_pipeline.launch.py`)
+## コンテナ起動シーケンス
 
 ```
-t=0s   ur5_gazebo.launch.py
+t=0s   trackdlo-gazebo
        ├── Gazebo Fortress (DLO + テーブル + UR5)
+       ├── robot_state_publisher → /robot_description, /tf
        ├── ros_gz_bridge (カメラトピック転送)
        ├── depth_format_converter
        ├── joint_state_broadcaster (t=3s)
        └── joint_trajectory_controller (t=5s)
 
-t=10s  trackdlo.launch.py
+t=10s  trackdlo-perception
        ├── init_tracker (初期化)
        └── trackdlo (追跡)
 
-t=15s  moveit_planning.launch.py
-       ├── MoveIt2 設定
+t=15s  trackdlo-moveit
+       ├── move_group (OMPL planner, moveit_controllers.yaml)
        └── dlo_manipulation_node (操作)
+
+t=20s  trackdlo-viz
+       └── rviz2 (RobotModel + MotionPlanning display)
 ```
 
-### 実機 (`full_pipeline.launch.py`)
+## ROS2 インターフェース
 
-```
-camera.launch.py        → RealSense D435 起動 + TF
-trackdlo.launch.py      → 初期化 + 追跡
-visualize_output.launch.py → RViz 可視化
-```
+### トピック
 
-## 主要パラメータ (`trackdlo_bringup/config/trackdlo_params.yaml`)
+| トピック | 型 | 発行元 | 説明 |
+|---|---|---|---|
+| `/camera/color/image_raw` | Image | Gazebo | RGB 画像 |
+| `/camera/aligned_depth_to_color/image_raw` | Image | Gazebo | Depth 画像 |
+| `/camera/aligned_depth_to_color/camera_info` | CameraInfo | Gazebo | カメラパラメータ |
+| `/trackdlo/init_nodes` | PointCloud2 | Perception | 初期ノード (1 回) |
+| `/trackdlo/results_pc` | PointCloud2 | Perception | 追跡結果ノード位置 |
+| `/trackdlo/results_marker` | MarkerArray | Perception | RViz 用マーカー |
+| `/trackdlo/results_img` | Image | Perception | アノテーション付き画像 |
+| `/trackdlo/filtered_pointcloud` | PointCloud2 | Perception | フィルタ済み入力点群 |
+| `/trackdlo/endpoints` | PoseArray | MoveIt | DLO 端点 (world 座標系) |
+| `/robot_description` | String | Gazebo | URDF (latched) |
+| `/joint_states` | JointState | Gazebo | 関節状態 |
+
+### サービス
+
+| サービス | 型 | ノード | 説明 |
+|---|---|---|---|
+| `/dlo_manipulation/enable` | SetBool | dlo_manipulation | 自律追従の ON/OFF |
+
+### アクション
+
+| アクション | 型 | ノード | 説明 |
+|---|---|---|---|
+| `/joint_trajectory_controller/follow_joint_trajectory` | FollowJointTrajectory | Gazebo | 軌道実行 |
+
+## 主要パラメータ
+
+### 追跡パラメータ (`trackdlo_bringup/config/trackdlo_params.yaml`)
 
 | パラメータ | デフォルト値 | 説明 |
 |---|---|---|
@@ -214,38 +297,27 @@ visualize_output.launch.py → RViz 可視化
 | `hsv_threshold_lower_limit` | "85 50 20" | HSV 下限 (H, S, V) |
 | `hsv_threshold_upper_limit` | "135 255 255" | HSV 上限 (H, S, V) |
 
-## ROS2 トピック一覧
+### 操作パラメータ (`moveit_planning.launch.py`)
 
-| トピック | 型 | 方向 | 説明 |
-|---|---|---|---|
-| `/camera/color/image_raw` | Image | 入力 | RGB 画像 |
-| `/camera/aligned_depth_to_color/image_raw` | Image | 入力 | Depth 画像 |
-| `/camera/aligned_depth_to_color/camera_info` | CameraInfo | 入力 | カメラパラメータ |
-| `/trackdlo/init_nodes` | PointCloud2 | 内部 | 初期ノード (1回) |
-| `/trackdlo/results_pc` | PointCloud2 | 出力 | 追跡結果ノード位置 |
-| `/trackdlo/results_marker` | MarkerArray | 出力 | RViz 用マーカー |
-| `/trackdlo/results_img` | Image | 出力 | アノテーション付き画像 |
-| `/trackdlo/filtered_pointcloud` | PointCloud2 | 出力 | フィルタ済み入力点群 |
-| `/trackdlo/guide_nodes` | MarkerArray | 出力 | ガイドノード |
-| `/trackdlo/self_occluded_pc` | PointCloud2 | 出力 | 自己オクルージョン点群 |
-
-## Docker での実行
-
-```bash
-cd docker/
-
-# ビルド
-docker compose build
-
-# 起動 (ホスト側で X11 許可が必要)
-xhost +local:docker
-docker compose up
-```
+| パラメータ | デフォルト値 | 説明 |
+|---|---|---|
+| `planning_group` | ur_manipulator | MoveIt planning group |
+| `approach_distance` | 0.3 | 端点上方の接近距離 (m) |
+| `grasp_offset_z` | 0.05 | 把持 Z オフセット (m) |
+| `tracking_rate` | 2.0 | 追従ループ周波数 (Hz) |
+| `position_tolerance` | 0.02 | 位置許容誤差 (m) |
+| `max_consecutive_failures` | 3 | 端点切り替えまでの連続失敗数 |
 
 ## 依存関係
 
 - ROS2 Humble
-- Gazebo Fortress (シミュレーション)
-- MoveIt2 (ロボット操作)
-- OpenCV, PCL, Eigen3 (知覚処理)
-- scikit-image, scipy (初期化)
+- Gazebo Fortress
+- MoveIt2 (OMPL planner)
+- Universal Robots ROS2 Driver (`ur_description`, `ur_moveit_config`)
+- ros2_control / gz_ros2_control
+- OpenCV, PCL, Eigen3
+- scikit-image, scipy, Open3D
+
+## ライセンス
+
+BSD-3-Clause
