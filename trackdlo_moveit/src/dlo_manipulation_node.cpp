@@ -55,6 +55,14 @@ void DloManipulationNode::deferred_init()
         results_topic_, 10,
         std::bind(&DloManipulationNode::results_callback, this, std::placeholders::_1));
 
+    endpoints_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(
+        "/trackdlo/endpoints", 10);
+
+    enable_srv_ = this->create_service<std_srvs::srv::SetBool>(
+        "~/enable",
+        std::bind(&DloManipulationNode::enable_callback, this,
+                  std::placeholders::_1, std::placeholders::_2));
+
     double period_ms = 1000.0 / tracking_rate_;
     tracking_timer_ = this->create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(period_ms)),
@@ -102,6 +110,27 @@ void DloManipulationNode::results_callback(
         latest_frame_id_ = planning_frame;
         both_endpoints_valid_ = true;
 
+        // Publish transformed endpoints for other nodes
+        geometry_msgs::msg::PoseArray endpoints_msg;
+        endpoints_msg.header.stamp = this->now();
+        endpoints_msg.header.frame_id = planning_frame;
+
+        geometry_msgs::msg::Pose pose_a;
+        pose_a.position.x = pt0_world.point.x;
+        pose_a.position.y = pt0_world.point.y;
+        pose_a.position.z = pt0_world.point.z;
+        pose_a.orientation.w = 1.0;
+        endpoints_msg.poses.push_back(pose_a);
+
+        geometry_msgs::msg::Pose pose_b;
+        pose_b.position.x = pt1_world.point.x;
+        pose_b.position.y = pt1_world.point.y;
+        pose_b.position.z = pt1_world.point.z;
+        pose_b.orientation.w = 1.0;
+        endpoints_msg.poses.push_back(pose_b);
+
+        endpoints_pub_->publish(endpoints_msg);
+
     } catch (tf2::TransformException & ex) {
         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
             "TF transform failed: %s", ex.what());
@@ -110,7 +139,7 @@ void DloManipulationNode::results_callback(
 
 void DloManipulationNode::tracking_timer_callback()
 {
-    if (!both_endpoints_valid_ || executing_) return;
+    if (!enabled_ || !both_endpoints_valid_ || executing_) return;
 
     Eigen::Vector3d target;
     std::string frame_id;
@@ -176,6 +205,16 @@ void DloManipulationNode::tracking_timer_callback()
         }
     }
     executing_ = false;
+}
+
+void DloManipulationNode::enable_callback(
+    const std_srvs::srv::SetBool::Request::SharedPtr request,
+    std_srvs::srv::SetBool::Response::SharedPtr response)
+{
+    enabled_ = request->data;
+    response->success = true;
+    response->message = enabled_ ? "Autonomous tracking enabled" : "Autonomous tracking disabled";
+    RCLCPP_INFO(this->get_logger(), "%s", response->message.c_str());
 }
 
 void DloManipulationNode::add_collision_objects()

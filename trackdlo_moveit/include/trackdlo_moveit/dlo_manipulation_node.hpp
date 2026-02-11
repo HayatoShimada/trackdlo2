@@ -6,6 +6,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <tf2_ros/buffer.h>
@@ -25,6 +27,9 @@ private:
     void results_callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg);
     void tracking_timer_callback();
     void add_collision_objects();
+    void enable_callback(
+        const std_srvs::srv::SetBool::Request::SharedPtr request,
+        std_srvs::srv::SetBool::Response::SharedPtr response);
 
     // TF2
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -32,6 +37,13 @@ private:
 
     // Subscribers
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr results_sub_;
+
+    // Publishers
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr endpoints_pub_;
+
+    // Services
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_srv_;
+    bool enabled_{true};
 
     // MoveIt interfaces
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;

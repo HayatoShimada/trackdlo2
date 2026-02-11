@@ -17,6 +17,7 @@ find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
@@ -40,6 +41,7 @@ ament_target_dependencies(dlo_manipulation_node
   moveit_core
   tf2_ros
   tf2_geometry_msgs
+  std_srvs
   pcl_conversions
 )
 
