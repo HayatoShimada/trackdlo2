@@ -31,10 +31,15 @@ private:
     void track_along_dlo();
     void scale_trajectory_speed(moveit_msgs::msg::RobotTrajectory & trajectory,
                                 double scale);
+    void move_to_home_position();
     void add_collision_objects();
     void enable_callback(
         const std_srvs::srv::SetBool::Request::SharedPtr request,
         std_srvs::srv::SetBool::Response::SharedPtr response);
+
+    // ノード列からウェイポイント（approach_distance_ 上方、下向き姿勢）を生成
+    std::vector<geometry_msgs::msg::Pose> generate_waypoints(
+        const std::vector<Eigen::Vector3d> & nodes) const;
 
     // TF2
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -64,18 +69,31 @@ private:
     std::string planning_group_;
     std::string results_topic_;
     double approach_distance_;
-    double grasp_offset_z_;
     double tracking_rate_;
     double position_tolerance_;
     double detection_timeout_;
     double startup_delay_;
     double tracking_velocity_scale_;
 
+    // Table geometry parameters
+    double table_height_;
+    double table_center_x_;
+    double table_center_y_;
+    double table_size_x_;
+    double table_size_y_;
+
+    // Velocity/pause parameters
+    double search_pause_duration_;
+    double tracking_pause_duration_;
+    double search_velocity_scale_;
+    double approach_velocity_scale_;
+
     // Traversal state machine
     enum class TraversalState { SEARCHING, FORWARD, BACKWARD };
     TraversalState traversal_state_{TraversalState::SEARCHING};
     int consecutive_failures_{0};
     int max_consecutive_failures_;
+    int max_search_iterations_;
 
     // DLO nodes (all points in planning frame)
     std::mutex endpoint_mutex_;

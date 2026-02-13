@@ -11,13 +11,15 @@ def generate_launch_description():
     params_file = os.path.join(bringup_dir, 'config', 'trackdlo_params.yaml')
 
     return LaunchDescription([
-        # TrackDLO C++ tracking node
+        # TrackDLO C++ tracking node (respawn on crash for robustness)
         Node(
             package='trackdlo_perception',
             executable='trackdlo',
             name='trackdlo',
             output='screen',
             parameters=[params_file],
+            respawn=True,
+            respawn_delay=3.0,
         ),
 
         # Python initialization node

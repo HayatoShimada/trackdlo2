@@ -214,6 +214,9 @@ private:
     bool initialized_;
     bool received_init_nodes_;
     bool received_proj_matrix_;
+    bool reinit_requested_{false};
+    int zero_visible_count_{0};
+    static constexpr int kMaxZeroVisibleFrames = 30;
     MatrixXd init_nodes_;
     std::vector<double> converted_node_coord_;
     Mat occlusion_mask_;
@@ -262,6 +265,7 @@ private:
     }
 
     // ---------- Callback: init nodes ----------
+    // init_nodesを常に受信し続ける（再初期化をサポートするため）
     void update_init_nodes(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& pc_msg)
     {
         pcl::PCLPointCloud2* cloud = new pcl::PCLPointCloud2;
@@ -271,10 +275,24 @@ private:
         delete cloud;
 
         init_nodes_ = cloud_xyz.getMatrixXfMap().topRows(3).transpose().cast<double>();
-        RCLCPP_INFO_STREAM(this->get_logger(), "Received " << init_nodes_.rows() << " init nodes");
+
+        if (!received_init_nodes_) {
+            RCLCPP_INFO_STREAM(this->get_logger(), "Received " << init_nodes_.rows() << " init nodes");
+        }
         received_init_nodes_ = true;
-        // Shut down the subscription by resetting the shared_ptr
-        init_nodes_sub_.reset();
+
+        // 既に初期化済みで再初期化待ち状態（visible_nodes=0が続いた場合）の場合、
+        // ここで再初期化をトリガーする
+        if (reinit_requested_) {
+            RCLCPP_WARN(this->get_logger(),
+                "Re-initializing tracker with %d init nodes",
+                static_cast<int>(init_nodes_.rows()));
+            initialized_ = false;
+            converted_node_coord_.clear();
+            converted_node_coord_.push_back(0.0);
+            zero_visible_count_ = 0;
+            reinit_requested_ = false;
+        }
     }
 
     // ---------- Callback: camera info ----------
@@ -572,8 +590,30 @@ private:
 
             RCLCPP_INFO_STREAM(this->get_logger(), "Visible nodes: " + std::to_string(visible_nodes.size()) + " / " + std::to_string(Y_.rows()));
 
-            if (visible_nodes.empty()) {
-                RCLCPP_WARN(this->get_logger(), "No visible nodes — skipping tracking step");
+            if (visible_nodes.size() < 3) {
+                RCLCPP_WARN(this->get_logger(),
+                    "Too few visible nodes (%zu) — skipping tracking step",
+                    visible_nodes.size());
+                // 可視ノード0が続いた場合、再初期化をリクエスト
+                if (visible_nodes.empty()) {
+                    zero_visible_count_++;
+                    if (zero_visible_count_ >= kMaxZeroVisibleFrames && !reinit_requested_) {
+                        RCLCPP_WARN(this->get_logger(),
+                            "Visible nodes = 0 for %d consecutive frames. "
+                            "Requesting re-initialization.", zero_visible_count_);
+                        reinit_requested_ = true;
+                    }
+                }
+                tracking_img_pub_.publish(tracking_img_msg);
+                return;
+            }
+            // 可視ノードが見つかったのでカウンターをリセット
+            zero_visible_count_ = 0;
+
+            if (X.rows() < 3) {
+                RCLCPP_WARN(this->get_logger(),
+                    "Too few points in filtered cloud (%d) — skipping tracking step",
+                    static_cast<int>(X.rows()));
                 tracking_img_pub_.publish(tracking_img_msg);
                 return;
             }
