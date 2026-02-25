@@ -134,6 +134,36 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /trackdlo/results_img
       Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Segmentation Mask
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /trackdlo/segmentation_mask_img
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Segmentation Overlay
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /trackdlo/segmentation_overlay
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Results Markers
@@ -228,7 +258,7 @@ Visualization Manager:
   Global Options:
     Background Color: 85; 87; 83
     Default Light: true
-    Fixed Frame: world
+    Fixed Frame: camera_link
     Frame Rate: 30
   Name: root
   Tools:

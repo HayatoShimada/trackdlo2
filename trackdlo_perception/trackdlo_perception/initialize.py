@@ -37,6 +37,7 @@ class InitTrackerNode(Node):
         self.declare_parameter('visualize_initialization_process', False)
         self.declare_parameter('hsv_threshold_upper_limit', '130 255 255')
         self.declare_parameter('hsv_threshold_lower_limit', '90 90 90')
+        self.declare_parameter('use_external_mask', False)
 
         self.num_of_nodes = self.get_parameter('num_of_nodes').value
         self.multi_color_dlo = self.get_parameter('multi_color_dlo').value
@@ -53,6 +54,13 @@ class InitTrackerNode(Node):
         lower_array = hsv_threshold_lower_limit.split(' ')
         self.upper = (int(upper_array[0]), int(upper_array[1]), int(upper_array[2]))
         self.lower = (int(lower_array[0]), int(lower_array[1]), int(lower_array[2]))
+
+        self.use_external_mask = self.get_parameter('use_external_mask').value
+        self.external_mask = None
+        if self.use_external_mask:
+            self.external_mask_sub = self.create_subscription(
+                Image, '/trackdlo/segmentation_mask', self.external_mask_callback, 10)
+            self.get_logger().info('External mask mode enabled. Subscribing to /trackdlo/segmentation_mask')
 
         # Camera info subscriber (will be destroyed after first message)
         self.camera_info_sub = self.create_subscription(
@@ -104,6 +112,9 @@ class InitTrackerNode(Node):
 
         return mask, mask_green
 
+    def external_mask_callback(self, msg):
+        self.external_mask = self.bridge.imgmsg_to_cv2(msg, 'mono8')
+
     def remove_duplicate_rows(self, array):
         _, idx = np.unique(array, axis=0, return_index=True)
         data = array[np.sort(idx)]
@@ -123,8 +134,15 @@ class InitTrackerNode(Node):
         # Process depth image
         cur_depth = self.bridge.imgmsg_to_cv2(depth, desired_encoding='passthrough')
 
-        if not self.multi_color_dlo:
+        if self.use_external_mask:
+            if self.external_mask is None:
+                self.get_logger().warn('Waiting for external segmentation mask...')
+                return
+            mask = self.external_mask.copy()
+            mask_tip = None
+        elif not self.multi_color_dlo:
             mask = cv2.inRange(hsv_image, self.lower, self.upper)
+            mask_tip = None
         else:
             mask, mask_tip = self.color_thresholding(hsv_image, cur_depth)
 
@@ -157,7 +175,7 @@ class InitTrackerNode(Node):
             pixel_x = all_pixel_coords[:, 1]
             pixel_y = all_pixel_coords[:, 0]
 
-            if self.multi_color_dlo:
+            if self.multi_color_dlo and mask_tip is not None:
                 pixel_value1 = mask_tip[pixel_y[-1], pixel_x[-1]]
                 if pixel_value1 == 255:
                     pixel_x, pixel_y = pixel_x[::-1], pixel_y[::-1]

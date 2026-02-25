@@ -1,0 +1,42 @@
+services:
+  # Base image (must be built first)
+  trackdlo-base:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.base
+    image: trackdlo2-base:latest
+    command: "true"
+
+  # RealSense perception test (all-in-one: camera + perception + visualization)
+  trackdlo-realsense:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.realsense
+      args:
+        BASE_IMAGE: trackdlo2-base:latest
+        INSTALL_SAM2: "false"
+    image: trackdlo2-realsense:latest
+    container_name: trackdlo-realsense
+    network_mode: host
+    env_file: .env
+    environment:
+      - DISPLAY=${DISPLAY}
+      - LIBGL_ALWAYS_SOFTWARE=0
+      - SEGMENTATION=${SEGMENTATION:-hsv}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${HOME}/.Xauthority:/root/.Xauthority:rw
+      - /dev:/dev
+      - ../trackdlo_bringup/rviz:/ros2_ws/install/trackdlo_bringup/share/trackdlo_bringup/rviz:ro
+      - ../trackdlo_bringup/config:/ros2_ws/install/trackdlo_bringup/share/trackdlo_bringup/config:ro
+    # USB + video passthrough for RealSense camera
+    privileged: true
+    depends_on:
+      trackdlo-base:
+        condition: service_completed_successfully
+    # Default: HSV segmentation. Override with SEGMENTATION env var.
+    command: >
+      bash -c "
+        source /ros2_ws/install/setup.bash &&
+        ros2 launch trackdlo_bringup realsense_test.launch.py segmentation:=${SEGMENTATION:-hsv}
+      "

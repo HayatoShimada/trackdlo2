@@ -38,28 +38,52 @@ public:
       frames_(0)
     {
         // Declare and get parameters
+
+        // --- 追跡アルゴリズム (CPD-LLE) の主要パラメータ ---
+        // beta: 形状剛性。小さいほど曲がりやすく(柔軟)、大きいほど直線的になろうとする (0.1 ~ 2.0 程度)
         this->declare_parameter<double>("beta", 0.35);
+        // lambda: 大域的滑らかさの強度。全体としてどのくらい滑らかさを保つか (1000 ~ 100000 程度)
         this->declare_parameter<double>("lambda", 50000.0);
+        // alpha: 初期形状への整合性(LLE正則化)。追跡開始時の局所的な曲がり具合をどの程度維持するか
         this->declare_parameter<double>("alpha", 3.0);
+        // mu: ノイズ比率(外れ値の割合)。点群にマスク以外のノイズがどの程度含まれるかの想定 (0.05 ~ 0.5)
         this->declare_parameter<double>("mu", 0.1);
+        // max_iter: EMアルゴリズムの最大反復回数。速度を上げるなら減らすが、精度は落ちる
         this->declare_parameter<int>("max_iter", 50);
+        // tol: 収束判定のしきい値。これ以上ノードが動かなくなったら計算を打ち切る
         this->declare_parameter<double>("tol", 0.0002);
+
+        // --- 可視性・オクルージョン判定パラメータ ---
+        // k_vis: 可視性項の重み。隠れている部分のノード更新をどの程度信じるか
         this->declare_parameter<double>("k_vis", 50.0);
+        // d_vis: ギャップ補間の最大測地線距離(m)。この距離以内のノードの途切れは「見えている」とみなして繋ぐ
         this->declare_parameter<double>("d_vis", 0.06);
+        // visibility_threshold: 可視判定の距離しきい値(m)。ノードと点群の距離がこれ以下なら可視と判定
         this->declare_parameter<double>("visibility_threshold", 0.008);
+
+        // --- 画像描画・事前処理パラメータ ---
+        // dlo_pixel_width: 画像平面に射影して重なりを判定する際の「DLOの太さ」(ピクセル)
         this->declare_parameter<int>("dlo_pixel_width", 40);
+        // beta_pre_proc, lambda_pre_proc: 初期化/事前処理用の形状パラメータ
         this->declare_parameter<double>("beta_pre_proc", 3.0);
         this->declare_parameter<double>("lambda_pre_proc", 1.0);
+        // lle_weight: 初期化時の局所形状保持の強さ
         this->declare_parameter<double>("lle_weight", 10.0);
+
+        // --- その他の動作設定 ---
         this->declare_parameter<bool>("multi_color_dlo", false);
+        // downsample_leaf_size: 点群を間引く際のボクセルサイズ(m)。小さいほど高密度(重い)、大きいとスカスカ(軽い)
         this->declare_parameter<double>("downsample_leaf_size", 0.008);
 
+        // トピック名や外部マスク使用の有無などの設定
         this->declare_parameter<std::string>("camera_info_topic", "/camera/aligned_depth_to_color/camera_info");
         this->declare_parameter<std::string>("rgb_topic", "/camera/color/image_raw");
         this->declare_parameter<std::string>("depth_topic", "/camera/aligned_depth_to_color/image_raw");
         this->declare_parameter<std::string>("result_frame_id", "camera_color_optical_frame");
+        // HSVカラーフィルタリングのしきい値設定 ("H S V" の文字列形式)
         this->declare_parameter<std::string>("hsv_threshold_upper_limit", "130 255 255");
         this->declare_parameter<std::string>("hsv_threshold_lower_limit", "90 90 30");
+        this->declare_parameter<bool>("use_external_mask", false);
 
         beta_ = this->get_parameter("beta").as_double();
         lambda_ = this->get_parameter("lambda").as_double();
@@ -83,6 +107,7 @@ public:
         result_frame_id_ = this->get_parameter("result_frame_id").as_string();
         std::string hsv_threshold_upper_limit = this->get_parameter("hsv_threshold_upper_limit").as_string();
         std::string hsv_threshold_lower_limit = this->get_parameter("hsv_threshold_lower_limit").as_string();
+        use_external_mask_ = this->get_parameter("use_external_mask").as_bool();
 
         // Parse HSV upper threshold
         std::string rgb_val = "";
@@ -141,6 +166,13 @@ public:
             "/mask_with_occlusion", 10,
             std::bind(&TrackDLONode::update_opencv_mask, this, std::placeholders::_1));
 
+        if (use_external_mask_) {
+            external_mask_sub_ = it.subscribe(
+                "/trackdlo/segmentation_mask", 10,
+                std::bind(&TrackDLONode::update_external_mask, this, std::placeholders::_1));
+            RCLCPP_INFO(this->get_logger(), "External mask mode enabled. Subscribing to /trackdlo/segmentation_mask");
+        }
+
         init_nodes_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/trackdlo/init_nodes", 1,
             std::bind(&TrackDLONode::update_init_nodes, this, std::placeholders::_1));
@@ -150,6 +182,8 @@ public:
             std::bind(&TrackDLONode::update_camera_info, this, std::placeholders::_1));
 
         tracking_img_pub_ = it.advertise("/trackdlo/results_img", pub_queue_size);
+        seg_mask_pub_ = it.advertise("/trackdlo/segmentation_mask_img", pub_queue_size);
+        seg_overlay_pub_ = it.advertise("/trackdlo/segmentation_overlay", pub_queue_size);
 
         pc_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/trackdlo/filtered_pointcloud", pub_queue_size);
@@ -194,9 +228,12 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr result_pc_pub_;
 
     image_transport::Publisher tracking_img_pub_;
+    image_transport::Publisher seg_mask_pub_;
+    image_transport::Publisher seg_overlay_pub_;
 
     // ---------- Subscribers ----------
     image_transport::Subscriber opencv_mask_sub_;
+    image_transport::Subscriber external_mask_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr init_nodes_sub_;
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
 
@@ -221,6 +258,9 @@ private:
     std::vector<double> converted_node_coord_;
     Mat occlusion_mask_;
     bool updated_opencv_mask_;
+    Mat external_mask_;
+    bool received_external_mask_{false};
+    bool use_external_mask_;
     MatrixXd proj_matrix_;
 
     trackdlo tracker_;
@@ -261,6 +301,15 @@ private:
         occlusion_mask_ = cv_bridge::toCvShare(opencv_mask_msg, "bgr8")->image;
         if (!occlusion_mask_.empty()) {
             updated_opencv_mask_ = true;
+        }
+    }
+
+    // ---------- Callback: external segmentation mask ----------
+    void update_external_mask(const sensor_msgs::msg::Image::ConstSharedPtr& mask_msg)
+    {
+        external_mask_ = cv_bridge::toCvShare(mask_msg, "mono8")->image.clone();
+        if (!external_mask_.empty()) {
+            received_external_mask_ = true;
         }
     }
 
@@ -380,22 +429,35 @@ private:
             std::chrono::high_resolution_clock::time_point cur_time;
 
             Mat mask, mask_rgb, mask_without_occlusion_block;
-            Mat cur_image_hsv;
 
-            // convert color
-            cv::cvtColor(cur_image_orig, cur_image_hsv, cv::COLOR_BGR2HSV);
+            if (use_external_mask_) {
+                if (!received_external_mask_) {
+                    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                        "Waiting for external segmentation mask...");
+                    return;
+                }
+                // Resize if needed to match the input image dimensions
+                if (external_mask_.rows != cur_image_orig.rows || external_mask_.cols != cur_image_orig.cols) {
+                    cv::resize(external_mask_, mask_without_occlusion_block, cur_image_orig.size(), 0, 0, cv::INTER_NEAREST);
+                } else {
+                    external_mask_.copyTo(mask_without_occlusion_block);
+                }
+            } else {
+                Mat cur_image_hsv;
+                cv::cvtColor(cur_image_orig, cur_image_hsv, cv::COLOR_BGR2HSV);
 
-            if (!multi_color_dlo_) {
-                // color_thresholding
-                cv::inRange(cur_image_hsv, cv::Scalar(lower_[0], lower_[1], lower_[2]), cv::Scalar(upper_[0], upper_[1], upper_[2]), mask_without_occlusion_block);
-            }
-            else {
-                mask_without_occlusion_block = color_thresholding(cur_image_hsv);
+                if (!multi_color_dlo_) {
+                    cv::inRange(cur_image_hsv, cv::Scalar(lower_[0], lower_[1], lower_[2]), cv::Scalar(upper_[0], upper_[1], upper_[2]), mask_without_occlusion_block);
+                }
+                else {
+                    mask_without_occlusion_block = color_thresholding(cur_image_hsv);
+                }
             }
 
             // update cur image for visualization
             Mat cur_image;
             Mat occlusion_mask_gray;
+            // 1. オクルージョンマスクとセグメンテーションマスクの合成処理
             if (updated_opencv_mask_) {
                 cv::cvtColor(occlusion_mask_, occlusion_mask_gray, cv::COLOR_BGR2GRAY);
                 cv::bitwise_and(mask_without_occlusion_block, occlusion_mask_gray, mask);
@@ -408,12 +470,29 @@ private:
 
             cv::cvtColor(mask, mask_rgb, cv::COLOR_GRAY2BGR);
 
+            // セグメンテーションマスクを publish
+            seg_mask_pub_.publish(
+                cv_bridge::CvImage(std_msgs::msg::Header(), "mono8", mask).toImageMsg());
+
+            // オーバーレイ画像を生成・publish
+            Mat seg_overlay;
+            cur_image_orig.copyTo(seg_overlay);
+            Mat color_layer(seg_overlay.size(), CV_8UC3, cv::Scalar(0, 255, 0));
+            color_layer.copyTo(seg_overlay, mask);
+            cv::addWeighted(cur_image_orig, 0.6, seg_overlay, 0.4, 0, seg_overlay);
+            std::vector<std::vector<cv::Point>> contours;
+            cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            cv::drawContours(seg_overlay, contours, -1, cv::Scalar(0, 255, 0), 2);
+            seg_overlay_pub_.publish(
+                cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", seg_overlay).toImageMsg());
+
             bool simulated_occlusion = false;
             int occlusion_corner_i = -1;
             int occlusion_corner_j = -1;
             int occlusion_corner_i_2 = -1;
             int occlusion_corner_j_2 = -1;
 
+            // 2. 3D点群（PointCloud）への変換
             // filter point cloud
             pcl::PointCloud<pcl::PointXYZRGB> cur_pc;
             pcl::PointCloud<pcl::PointXYZRGB> cur_pc_downsampled;
@@ -459,6 +538,7 @@ private:
                 }
             }
 
+            // 3. ダウンサンプリング（VoxelGridフィルタによる間引きで軽量化）
             // Perform downsampling
             pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloudPtr(cur_pc.makeShared());
             pcl::VoxelGrid<pcl::PointXYZRGB> sor;
@@ -478,6 +558,7 @@ private:
             pre_proc_total_ += time_diff;
             cur_time = std::chrono::high_resolution_clock::now();
 
+            // 4. 新規点群と現在モデルとの間の最短距離計算
             // calculate node visibility
             // for each node in Y, determine its shortest distance to X
             // for each point in X, determine its shortest distance to Y
@@ -507,6 +588,7 @@ private:
             (void)occlusion_corner_i_2;
             (void)occlusion_corner_j_2;
 
+            // 5. 画像平面への再射影による重なり・自己オクルージョン判定
             // for current nodes and edges in Y, sort them based on how far away they are from the camera
             std::vector<double> averaged_node_camera_dists = {};
             std::vector<int> indices_vec = {};
@@ -552,6 +634,7 @@ private:
                 bool pt1_in_bounds = (row_1 >= 0 && row_1 < img_rows && col_1 >= 0 && col_1 < img_cols);
                 bool pt2_in_bounds = (row_2 >= 0 && row_2 < img_rows && col_2 >= 0 && col_2 < img_cols);
 
+                // 6. 可視ノードのリスト作成
                 // only add to visible nodes if did not overlap with existing edges
                 if (pt1_in_bounds && projected_edges.at<uchar>(row_1, col_1) == 0) {
                     if (shortest_node_pt_dists[idx] <= visibility_threshold_) {
@@ -632,6 +715,7 @@ private:
             }
             visible_nodes_extended.push_back(visible_nodes.back());
 
+            // 7. コアトラッキング処理（CPD-LLEアルゴリズム）の実行
             // store Y_0 for post processing
             MatrixXd Y_0 = Y_.replicate(1, 1);
 
@@ -724,6 +808,7 @@ private:
             // publish image
             tracking_img_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", tracking_img).toImageMsg();
 
+            // 8. 追跡結果のパブリッシュ（出力）と可視化表示
             // publish the results as a marker array
             visualization_msgs::msg::MarkerArray results = MatrixXd2MarkerArray(Y_, result_frame_id_, "node_results", {1.0, 150.0/255.0, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}, 0.01, 0.005, vis, {1.0, 0.0, 0.0, 1.0}, {1.0, 0.0, 0.0, 1.0});
             // visualization_msgs::msg::MarkerArray results = MatrixXd2MarkerArray(Y_, result_frame_id_, "node_results", {1.0, 150.0/255.0, 0.0, 1.0}, {0.0, 1.0, 0.0, 1.0}, 0.01, 0.005);

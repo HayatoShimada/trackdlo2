@@ -52,10 +52,24 @@ trackdlo2/
 
 ```bash
 cd docker/
+
+# シミュレーション + RealSense テスト (全イメージ)
 bash build.sh
+
+# シミュレーションのみ
+bash build.sh sim
+
+# RealSense テストのみ
+bash build.sh realsense
+
+# RealSense + SAM2 (CPU)
+bash build.sh realsense-sam2
+
+# RealSense + SAM2 (CUDA)
+bash build.sh realsense-sam2-cuda
 ```
 
-### 起動
+### 起動 (シミュレーション)
 
 ```bash
 # X11 転送を許可
@@ -68,7 +82,26 @@ xhost +local:docker
 ./run.sh nvidia
 
 # バックグラウンド起動
-./run.sh amd -d
+./run.sh amd sim -d
+```
+
+### 起動 (RealSense 実機テスト)
+
+```bash
+xhost +local:docker
+
+# HSV セグメンテーション (デフォルト)
+./run.sh amd realsense
+./run.sh nvidia realsense
+
+# HSV チューナー GUI
+./run.sh amd realsense:hsv_tuner
+
+# SAM2 セグメンテーション (要: realsense-sam2 ビルド)
+./run.sh nvidia realsense:sam2
+
+# バックグラウンド起動
+./run.sh amd realsense -d
 ```
 
 ### 動作確認
@@ -95,6 +128,101 @@ Viz コンテナの RViz2 に MoveIt MotionPlanning display が組み込まれ�
 1. 自律追従を停止: `ros2 service call /dlo_manipulation/enable std_srvs/srv/SetBool "{data: false}"`
 2. RViz の MotionPlanning パネルで Interactive Marker をドラッグしてゴール姿勢を設定
 3. "Plan" ボタンで軌道を確認、"Plan & Execute" で実行
+
+## RealSense 実機テスト (UR5/Gazebo 不要)
+
+実機の RealSense D435 カメラのみでパーセプションパイプラインをテストする。
+セグメンテーション方法は launch 引数で切替可能。
+
+### 起動 (Docker)
+
+```bash
+cd docker/
+
+# ビルド
+bash build.sh realsense
+
+# HSV (デフォルト)
+./run.sh amd realsense
+
+# HSV チューナー GUI
+./run.sh amd realsense:hsv_tuner
+
+# SAM2 (事前に bash build.sh realsense-sam2 が必要)
+./run.sh nvidia realsense:sam2
+```
+
+### 起動 (ネイティブ)
+
+```bash
+# ビルド
+colcon build --packages-select trackdlo_perception trackdlo_utils trackdlo_bringup
+source install/setup.bash
+
+# デフォルト: HSV しきい値によるセグメンテーション
+ros2 launch trackdlo_bringup realsense_test.launch.py
+
+# インタラクティブ HSV チューナー (スライダー GUI)
+ros2 launch trackdlo_bringup realsense_test.launch.py segmentation:=hsv_tuner
+
+# SAM2 セグメンテーション (クリックプロンプト)
+ros2 launch trackdlo_bringup realsense_test.launch.py segmentation:=sam2
+
+# RViz なしで起動
+ros2 launch trackdlo_bringup realsense_test.launch.py rviz:=false
+```
+
+### セグメンテーションモード
+
+| モード | 説明 | ユースケース |
+|--------|------|-------------|
+| `hsv` (デフォルト) | HSV しきい値処理 | DLO の色が既知、パラメータ調整済み |
+| `hsv_tuner` | スライダー GUI でリアルタイム調整 | 新しい DLO の HSV 値を探す |
+| `sam2` | Segment Anything Model 2 | 色に依存しない汎用セグメンテーション |
+
+### HSV チューナーの使い方
+
+OpenCV ウィンドウに H/S/V の最小・最大値スライダーが表示される。
+
+- 左: 元画像、右: マスク適用結果
+- スライダーを調整して DLO だけが抽出されるようにする
+- マスクはリアルタイムで追跡パイプラインに送信される
+- **Q キー**: 終了。最終値が YAML 互換形式でログに出力される
+
+### SAM2 の使い方
+
+起動すると最初のフレームが OpenCV ウィンドウに表示される。
+
+- **左クリック**: DLO 上の点 (foreground)
+- **右クリック**: 背景の点 (background)
+- **R キー**: クリックをリセット
+- **Enter**: 確定してセグメンテーション開始
+
+SAM2 は毎フレームクリック点 + 前フレームのバウンディングボックスをプロンプトとして推論する。
+
+```bash
+# SAM2 のインストール
+pip install git+https://github.com/facebookresearch/sam2.git
+
+# CPU のみの場合 (推論が遅くなる)
+# realsense_params.yaml の sam2_segmentation.ros__parameters.force_cpu を true に設定
+```
+
+### アーキテクチャ
+
+```
+[RealSense D435]
+    │
+    ├── segmentation:=hsv
+    │   → trackdlo_node 内部で HSV しきい値処理 (既存動作)
+    │
+    ├── segmentation:=hsv_tuner
+    │   → HSV Tuner GUI ノード ──→ /trackdlo/segmentation_mask
+    │                                        ↓
+    └── segmentation:=sam2                trackdlo_node
+        → SAM2 ノード ──────────→ /trackdlo/segmentation_mask
+                                   (use_external_mask=true)
+```
 
 ## 処理フロー
 

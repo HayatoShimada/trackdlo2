@@ -1,0 +1,78 @@
+trackdlo:
+  ros__parameters:
+    # Topics (realsense2_camera driver defaults)
+    camera_info_topic: "/camera/aligned_depth_to_color/camera_info"
+    rgb_topic: "/camera/color/image_raw"
+    depth_topic: "/camera/aligned_depth_to_color/image_raw"
+    result_frame_id: "camera_color_optical_frame"
+
+    # External mask (automatically set by launch file when using hsv_tuner or sam2)
+    use_external_mask: false
+
+    # HSV thresholds (used only when use_external_mask is false)
+    hsv_threshold_upper_limit: "135 255 255"
+    hsv_threshold_lower_limit: "85 50 20"
+
+    # MCT weights: larger values make the object more rigid
+    beta: 0.35
+    lambda: 50000.0
+
+    # Alignment strength
+    alpha: 3.0
+
+    # Noise parameter: 0-1, larger means noisier point cloud
+    mu: 0.1
+
+    # EM loop max iterations
+    max_iter: 20
+
+    # EM convergence tolerance
+    tol: 0.001
+
+    # Visibility information strength
+    k_vis: 50.0
+
+    # Max geodesic distance for visible nodes
+    d_vis: 0.06
+
+    # Max distance for a node to be considered visible
+    visibility_threshold: 0.008
+
+    # Approximate DLO width in pixels (larger for real camera vs simulation)
+    dlo_pixel_width: 40
+
+    # GLTP registration pre-processing parameters
+    beta_pre_proc: 3.0
+    lambda_pre_proc: 1.0
+    lle_weight: 10.0
+
+    # Point cloud downsampling leaf size
+    downsample_leaf_size: 0.02
+
+    # Multi-color DLO detection
+    multi_color_dlo: false
+
+init_tracker:
+  ros__parameters:
+    camera_info_topic: "/camera/aligned_depth_to_color/camera_info"
+    rgb_topic: "/camera/color/image_raw"
+    depth_topic: "/camera/aligned_depth_to_color/image_raw"
+    result_frame_id: "camera_color_optical_frame"
+    num_of_nodes: 30
+    multi_color_dlo: false
+    visualize_initialization_process: false
+    use_external_mask: false
+    hsv_threshold_upper_limit: "135 255 255"
+    hsv_threshold_lower_limit: "85 50 20"
+
+hsv_tuner:
+  ros__parameters:
+    rgb_topic: "/camera/color/image_raw"
+    hsv_threshold_upper_limit: "135 255 255"
+    hsv_threshold_lower_limit: "85 50 20"
+
+sam2_segmentation:
+  ros__parameters:
+    rgb_topic: "/camera/color/image_raw"
+    sam2_checkpoint: "facebook/sam2.1-hiera-small"
+    force_cpu: false

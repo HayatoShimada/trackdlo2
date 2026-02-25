@@ -1,0 +1,65 @@
+ARG BASE_IMAGE=trackdlo2-base:latest
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install RealSense camera driver, RViz2, TF2, robot_state_publisher
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-realsense2-camera \
+    ros-${ROS_DISTRO}-realsense2-description \
+    ros-${ROS_DISTRO}-rviz2 \
+    ros-${ROS_DISTRO}-robot-state-publisher \
+    ros-${ROS_DISTRO}-xacro \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create workspace
+RUN mkdir -p /ros2_ws/src
+WORKDIR /ros2_ws
+
+# Copy packages needed for perception + bringup
+COPY trackdlo_perception/ src/trackdlo_perception/
+COPY trackdlo_utils/ src/trackdlo_utils/
+COPY trackdlo_bringup/ src/trackdlo_bringup/
+COPY trackdlo_msgs/ src/trackdlo_msgs/
+
+# Build workspace
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    rm -rf build log
+
+# Install SAM2 dependencies (optional, for sam2 segmentation mode)
+# torch is large; install CPU-only version to keep image smaller.
+# Override with CUDA version by rebuilding with --build-arg INSTALL_SAM2=cuda
+ARG INSTALL_SAM2=false
+
+# Install CUDA runtime for GPU inference (only when INSTALL_SAM2=cuda)
+RUN if [ "$INSTALL_SAM2" = "cuda" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends \
+            wget gnupg2 && \
+        wget -qO /tmp/cuda-keyring.deb \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+        dpkg -i /tmp/cuda-keyring.deb && rm /tmp/cuda-keyring.deb && \
+        apt-get update && apt-get install -y --no-install-recommends \
+            cuda-cudart-12-6 libcublas-12-6 libcusparse-12-6 \
+            libcusolver-12-6 libcufft-12-6 libcurand-12-6 && \
+        rm -rf /var/lib/apt/lists/* ; \
+    fi
+ENV PATH="/usr/local/cuda/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+
+RUN if [ "$INSTALL_SAM2" = "true" ] || [ "$INSTALL_SAM2" = "cpu" ]; then \
+        pip3 install --no-cache-dir \
+            torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+        SAM2_BUILD_CUDA=0 pip3 install --no-cache-dir --no-build-isolation \
+            "git+https://github.com/facebookresearch/sam2.git" && \
+        pip3 install --no-cache-dir huggingface_hub ; \
+    elif [ "$INSTALL_SAM2" = "cuda" ]; then \
+        pip3 install --no-cache-dir torch torchvision && \
+        pip3 install --no-cache-dir --no-build-isolation \
+            "git+https://github.com/facebookresearch/sam2.git" && \
+        pip3 install --no-cache-dir huggingface_hub ; \
+    fi
+
+RUN echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
+
+CMD ["bash"]
