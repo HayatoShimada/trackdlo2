@@ -29,8 +29,8 @@ def _launch_setup(context, *args, **kwargs):
         ),
         launch_arguments={
             'camera_namespace': '',
-            'depth_module.depth_profile': '1280x720x15',
-            'rgb_camera.color_profile': '1280x720x15',
+            'depth_module.depth_profile': '640x480x15',
+            'rgb_camera.color_profile': '640x480x15',
             'align_depth.enable': 'true',
             'pointcloud.enable': 'false',
             'temporal_filter.enable': 'true',
@@ -98,6 +98,15 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             parameters=[params_file],
             condition=LaunchConfigurationEquals('segmentation', 'sam2'),
+        ),
+
+        # --- Composite View (4-panel display) ---
+        Node(
+            package='trackdlo_utils',
+            executable='composite_view',
+            name='composite_view',
+            output='screen',
+            parameters=[params_file],
         ),
 
         # --- RViz2 ---

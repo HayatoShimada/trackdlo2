@@ -176,7 +176,7 @@ class SAM2SegmentationNode(Node):
                     y_min, y_max = coords[0].min(), coords[0].max()
                     x_min, x_max = coords[1].min(), coords[1].max()
                     # 予測のブレを吸収するため、計算されたバウンディングボックスを上下左右に少し広げる
-                    margin = 20
+                    margin = 10
                     h, w = image.shape[:2]
                     input_box = np.array([
                         max(0, x_min - margin),
@@ -196,6 +196,16 @@ class SAM2SegmentationNode(Node):
             # 8. 出力されたマスク候補のうち、最もスコア(信頼度)の高いものを選択し、2値化画像(0 or 255)に変換
             best_idx = np.argmax(scores)
             mask = (masks[best_idx] > 0).astype(np.uint8) * 255
+
+            # 8.5. 前フレームとの一貫性チェック：マスクが反転していたら補正
+            if self.prev_mask is not None:
+                overlap = np.count_nonzero(mask & self.prev_mask)
+                overlap_inv = np.count_nonzero((255 - mask) & self.prev_mask)
+                if overlap_inv > overlap:
+                    mask = 255 - mask
+                    self.get_logger().warn(
+                        'Detected inverted mask, flipping back',
+                        throttle_duration_sec=2.0)
 
             # 9. 次フレームのBoxプロンプト探索用に結果を保存し、ROS 2トピックとしてパブリッシュ
             self.prev_mask = mask

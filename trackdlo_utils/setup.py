@@ -29,6 +29,7 @@ setup(
             'depth_format_converter = trackdlo_utils.depth_format_converter:main',
             'hsv_tuner = trackdlo_utils.hsv_tuner_node:main',
             'sam2_segmentation = trackdlo_utils.sam2_segmentation_node:main',
+            'composite_view = trackdlo_utils.composite_view_node:main',
         ],
     },
 )

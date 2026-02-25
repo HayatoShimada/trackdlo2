@@ -60,6 +60,14 @@ RUN if [ "$INSTALL_SAM2" = "true" ] || [ "$INSTALL_SAM2" = "cpu" ]; then \
         pip3 install --no-cache-dir huggingface_hub ; \
     fi
 
+# Pre-download SAM2 model weights into the image so startup is instant
+ARG SAM2_CHECKPOINT=facebook/sam2.1-hiera-small
+RUN if [ "$INSTALL_SAM2" != "false" ]; then \
+        python3 -c "\
+from sam2.sam2_image_predictor import SAM2ImagePredictor; \
+SAM2ImagePredictor.from_pretrained('${SAM2_CHECKPOINT}')" ; \
+    fi
+
 RUN echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
 
 CMD ["bash"]

@@ -29,6 +29,7 @@ services:
       - /dev:/dev
       - ../trackdlo_bringup/rviz:/ros2_ws/install/trackdlo_bringup/share/trackdlo_bringup/rviz:ro
       - ../trackdlo_bringup/config:/ros2_ws/install/trackdlo_bringup/share/trackdlo_bringup/config:ro
+      - ../trackdlo_bringup/launch:/ros2_ws/install/trackdlo_bringup/share/trackdlo_bringup/launch:ro
     # USB + video passthrough for RealSense camera
     privileged: true
     depends_on:

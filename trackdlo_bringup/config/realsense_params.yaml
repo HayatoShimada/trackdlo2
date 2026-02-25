@@ -38,8 +38,8 @@ trackdlo:
     # Max distance for a node to be considered visible
     visibility_threshold: 0.008
 
-    # Approximate DLO width in pixels (larger for real camera vs simulation)
-    dlo_pixel_width: 40
+    # Approximate DLO width in pixels (scaled to camera resolution)
+    dlo_pixel_width: 20
 
     # GLTP registration pre-processing parameters
     beta_pre_proc: 3.0
