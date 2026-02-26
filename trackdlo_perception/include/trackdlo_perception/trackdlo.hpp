@@ -74,6 +74,17 @@ class trackdlo
         void initialize_geodesic_coord(std::vector<double> geodesic_coord);
         void initialize_nodes(MatrixXd Y_init);
         void set_sigma2(double sigma2);
+        void set_beta(double v) { beta_ = v; }
+        void set_lambda(double v) { lambda_ = v; }
+        void set_alpha(double v) { alpha_ = v; }
+        void set_mu(double v) { mu_ = v; }
+        void set_max_iter(int v) { max_iter_ = v; }
+        void set_tol(double v) { tol_ = v; }
+        void set_k_vis(double v) { k_vis_ = v; }
+        void set_beta_pre_proc(double v) { beta_pre_proc_ = v; }
+        void set_lambda_pre_proc(double v) { lambda_pre_proc_ = v; }
+        void set_lle_weight(double v) { lle_weight_ = v; }
+        void set_visibility_threshold(double v) { visibility_threshold_ = v; }
 
         bool cpd_lle(MatrixXd X_orig,
                      MatrixXd& Y,

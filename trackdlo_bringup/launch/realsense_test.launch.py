@@ -109,6 +109,14 @@ def _launch_setup(context, *args, **kwargs):
             parameters=[params_file],
         ),
 
+        # --- CPD-LLE Parameter Tuner ---
+        Node(
+            package='trackdlo_utils',
+            executable='param_tuner',
+            name='param_tuner',
+            output='screen',
+        ),
+
         # --- RViz2 ---
         Node(
             package='rviz2',

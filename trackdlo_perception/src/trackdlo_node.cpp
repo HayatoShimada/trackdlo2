@@ -2,6 +2,7 @@
 #include "trackdlo_perception/utils.hpp"
 
 #include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
@@ -152,6 +153,49 @@ public:
                 this->init_timer_->cancel();
             }
         );
+
+        // Dynamic parameter update callback
+        param_callback_handle_ = this->add_on_set_parameters_callback(
+            [this](const std::vector<rclcpp::Parameter> & params) {
+                for (const auto & p : params) {
+                    const auto & name = p.get_name();
+                    if (name == "beta") {
+                        beta_ = p.as_double(); tracker_.set_beta(beta_);
+                    } else if (name == "lambda") {
+                        lambda_ = p.as_double(); tracker_.set_lambda(lambda_);
+                    } else if (name == "alpha") {
+                        alpha_ = p.as_double(); tracker_.set_alpha(alpha_);
+                    } else if (name == "mu") {
+                        mu_ = p.as_double(); tracker_.set_mu(mu_);
+                    } else if (name == "max_iter") {
+                        max_iter_ = p.as_int(); tracker_.set_max_iter(max_iter_);
+                    } else if (name == "tol") {
+                        tol_ = p.as_double(); tracker_.set_tol(tol_);
+                    } else if (name == "k_vis") {
+                        k_vis_ = p.as_double(); tracker_.set_k_vis(k_vis_);
+                    } else if (name == "d_vis") {
+                        d_vis_ = p.as_double();
+                    } else if (name == "visibility_threshold") {
+                        visibility_threshold_ = p.as_double(); tracker_.set_visibility_threshold(visibility_threshold_);
+                    } else if (name == "dlo_pixel_width") {
+                        dlo_pixel_width_ = p.as_int();
+                    } else if (name == "downsample_leaf_size") {
+                        downsample_leaf_size_ = p.as_double();
+                    } else if (name == "beta_pre_proc") {
+                        beta_pre_proc_ = p.as_double(); tracker_.set_beta_pre_proc(beta_pre_proc_);
+                    } else if (name == "lambda_pre_proc") {
+                        lambda_pre_proc_ = p.as_double(); tracker_.set_lambda_pre_proc(lambda_pre_proc_);
+                    } else if (name == "lle_weight") {
+                        lle_weight_ = p.as_double(); tracker_.set_lle_weight(lle_weight_);
+                    } else {
+                        continue;
+                    }
+                    RCLCPP_INFO(this->get_logger(), "Parameter '%s' updated", name.c_str());
+                }
+                rcl_interfaces::msg::SetParametersResult result;
+                result.successful = true;
+                return result;
+            });
     }
 
     void init()
@@ -244,6 +288,9 @@ private:
 
     // ---------- Timer for deferred init ----------
     rclcpp::TimerBase::SharedPtr init_timer_;
+
+    // ---------- Parameter callback ----------
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
     // ---------- Tracker state ----------
     MatrixXd Y_;
