@@ -1,33 +1,145 @@
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.actions import (
+    DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction,
+)
+from launch.conditions import IfCondition, LaunchConfigurationEquals
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
-def generate_launch_description():
+def _launch_setup(context, *args, **kwargs):
     bringup_dir = get_package_share_directory('trackdlo_bringup')
-    params_file = os.path.join(bringup_dir, 'config', 'trackdlo_params.yaml')
+    params_file = os.path.join(bringup_dir, 'config', 'realsense_params.yaml')
 
-    return LaunchDescription([
-        # TrackDLO C++ tracking node (respawn on crash for robustness)
+    segmentation = LaunchConfiguration('segmentation')
+    rviz = LaunchConfiguration('rviz')
+
+    # use_external_mask is true when segmentation is not 'hsv'
+    use_external_mask = PythonExpression(["'", segmentation, "' != 'hsv'"])
+
+    # RealSense camera launch
+    realsense_dir = get_package_share_directory('realsense2_camera')
+    realsense_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(realsense_dir, 'launch', 'rs_launch.py')
+        ),
+        launch_arguments={
+            'camera_namespace': '',
+            'depth_module.depth_profile': '640x480x15',
+            'rgb_camera.color_profile': '640x480x15',
+            'align_depth.enable': 'true',
+            'pointcloud.enable': 'false',
+            'temporal_filter.enable': 'true',
+            'decimation_filter.enable': 'true',
+        }.items(),
+    )
+
+    return [
+        realsense_launch,
+
+        # --- Static TF: base_link -> camera_link ---
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='base_link_to_camera_tf',
+            arguments=[
+                '--x', '0', '--y', '0', '--z', '0',
+                '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
+                '--frame-id', 'base_link',
+                '--child-frame-id', 'camera_link',
+            ],
+        ),
+
+        # --- TrackDLO C++ tracking node ---
         Node(
             package='trackdlo_perception',
             executable='trackdlo',
             name='trackdlo',
             output='screen',
-            parameters=[params_file],
+            parameters=[
+                params_file,
+                {'use_external_mask': use_external_mask},
+            ],
             respawn=True,
             respawn_delay=3.0,
         ),
 
-        # Python initialization node
+        # --- Python initialization node ---
         Node(
             package='trackdlo_perception',
             executable='init_tracker',
             name='init_tracker',
             output='screen',
+            parameters=[
+                params_file,
+                {'use_external_mask': use_external_mask},
+            ],
+        ),
+
+        # --- HSV Segmentation with GUI (from trackdlo_segmentation) ---
+        Node(
+            package='trackdlo_segmentation',
+            executable='hsv_segmentation',
+            name='hsv_segmentation',
+            output='screen',
+            parameters=[params_file],
+            condition=LaunchConfigurationEquals('segmentation', 'hsv_tuner'),
+        ),
+
+        # --- SAM2 Segmentation (only when segmentation:=sam2) ---
+        Node(
+            package='trackdlo_utils',
+            executable='sam2_segmentation',
+            name='sam2_segmentation',
+            output='screen',
+            parameters=[params_file],
+            condition=LaunchConfigurationEquals('segmentation', 'sam2'),
+        ),
+
+        # --- Composite View (4-panel display) ---
+        Node(
+            package='trackdlo_utils',
+            executable='composite_view',
+            name='composite_view',
+            output='screen',
             parameters=[params_file],
         ),
+
+        # --- CPD-LLE Parameter Tuner ---
+        Node(
+            package='trackdlo_utils',
+            executable='param_tuner',
+            name='param_tuner',
+            output='screen',
+        ),
+
+        # --- RViz2 ---
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            arguments=[
+                '-d', os.path.join(bringup_dir, 'rviz', 'tracking.rviz')
+            ],
+            condition=IfCondition(rviz),
+        ),
+    ]
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'segmentation', default_value='hsv',
+            description='Segmentation method: hsv (built-in), hsv_tuner (GUI), sam2',
+            choices=['hsv', 'hsv_tuner', 'sam2'],
+        ),
+        DeclareLaunchArgument(
+            'rviz', default_value='true',
+            description='Launch RViz2 for visualization',
+        ),
+        OpaqueFunction(function=_launch_setup),
     ])

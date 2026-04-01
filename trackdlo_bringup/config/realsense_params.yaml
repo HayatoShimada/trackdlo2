@@ -76,3 +76,10 @@ sam2_segmentation:
     rgb_topic: "/camera/color/image_raw"
     sam2_checkpoint: "facebook/sam2.1-hiera-small"
     force_cpu: false
+
+hsv_segmentation:
+  ros__parameters:
+    rgb_topic: /camera/color/image_raw
+    hsv_threshold_upper_limit: "135 255 255"
+    hsv_threshold_lower_limit: "85 50 20"
+    enable_gui: true
