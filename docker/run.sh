@@ -4,15 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-GPU="${1:-amd}"
-MODE="${2:-sim}"
+MODE="${1:-sim}"
 
-if [[ "$GPU" != "amd" && "$GPU" != "nvidia" ]]; then
-  echo "Usage: $0 [amd|nvidia] [sim|realsense] [options...]"
-  echo ""
-  echo "  GPU:"
-  echo "    amd    - Use AMD GPU (default)"
-  echo "    nvidia - Use NVIDIA GPU"
+if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then
+  echo "Usage: $0 [sim|realsense|realsense:hsv_tuner|realsense:sam2] [options...]"
   echo ""
   echo "  Mode:"
   echo "    sim                  - Gazebo simulation (default)"
@@ -21,11 +16,11 @@ if [[ "$GPU" != "amd" && "$GPU" != "nvidia" ]]; then
   echo "    realsense:sam2       - RealSense + SAM2 segmentation"
   echo ""
   echo "  Examples:"
-  echo "    $0 amd                        # Simulation with AMD GPU"
-  echo "    $0 nvidia realsense           # RealSense test with NVIDIA GPU"
-  echo "    $0 amd realsense:hsv_tuner    # RealSense + HSV tuner"
-  echo "    $0 nvidia realsense:sam2 -d   # RealSense + SAM2 (detached)"
-  exit 1
+  echo "    $0 sim                        # Simulation with NVIDIA GPU"
+  echo "    $0 realsense                  # RealSense test with NVIDIA GPU"
+  echo "    $0 realsense:hsv_tuner        # RealSense + HSV tuner"
+  echo "    $0 realsense:sam2 -d          # RealSense + SAM2 (detached)"
+  exit 0
 fi
 
 # Parse mode and segmentation
@@ -33,16 +28,16 @@ IFS=':' read -r BASE_MODE SEGMENTATION <<< "$MODE"
 SEGMENTATION="${SEGMENTATION:-hsv}"
 
 if [[ "$BASE_MODE" == "sim" ]]; then
-  echo "=== Starting simulation with ${GPU} GPU support ==="
-  docker compose -f docker-compose.yml -f "docker-compose.${GPU}.yml" up "${@:3}"
+  echo "=== Starting simulation with NVIDIA GPU support ==="
+  docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up "${@:2}"
 
 elif [[ "$BASE_MODE" == "realsense" ]]; then
-  echo "=== Starting RealSense test (segmentation=${SEGMENTATION}) with ${GPU} GPU ==="
+  echo "=== Starting RealSense test (segmentation=${SEGMENTATION}) with NVIDIA GPU ==="
   SEGMENTATION="$SEGMENTATION" \
     docker compose \
       -f docker-compose.realsense.yml \
-      -f "docker-compose.realsense.${GPU}.yml" \
-      up "${@:3}"
+      -f docker-compose.realsense.nvidia.yml \
+      up "${@:2}"
 
 else
   echo "Error: Unknown mode '${BASE_MODE}'. Use 'sim' or 'realsense'."

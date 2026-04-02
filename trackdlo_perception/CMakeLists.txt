@@ -8,6 +8,8 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+enable_language(CUDA)
+
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
@@ -36,6 +38,11 @@ add_library(trackdlo_core SHARED
   src/trackdlo.cpp
   src/utils.cpp
   src/evaluator.cpp
+  src/image_preprocessor.cpp
+  src/visibility_checker.cpp
+  src/visualizer.cpp
+  src/pipeline_manager.cpp
+  src/pointcloud_cuda.cu
 )
 target_link_libraries(trackdlo_core
   Eigen3::Eigen
